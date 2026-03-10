@@ -22,6 +22,8 @@ npx vitest run src/__tests__/feature.test.ts
 
 Set `ANTHROPIC_API_KEY` (required) and optionally `KAI_MODEL` (default: `claude-opus-4-6`) before running the bot or smoke tests.
 
+> **Note:** Whenever a new npm script is added to `package.json`, update both the `## Commands` section above **and** the `## Usage` section in `README.md` with a brief description.
+
 ## Architecture
 
 KaiBot watches a `features/` directory in a target project and processes each `.md` file through a Claude agent that plans and implements the feature autonomously.
