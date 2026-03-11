@@ -79,6 +79,10 @@ export interface UIState {
   /** Temporary flash message shown after hotkey actions (e.g. "Feature created: …"). */
   flashMessage: string;
 
+  // Model selector
+  /** Whether the model selector overlay is currently open. */
+  isSelectingModel: boolean;
+
   // Status message (bottom bar)
   statusMessage: string;
 }
@@ -114,6 +118,7 @@ class UIStore extends EventEmitter {
     hotkeyInputLines: [],
     featureReviewActive: false,
     flashMessage: "",
+    isSelectingModel: false,
     statusMessage: "",
   };
 
@@ -294,6 +299,28 @@ class UIStore extends EventEmitter {
     this.emitChange();
   }
 
+  // -- Model selector -------------------------------------------------------
+
+  /** Open the model selector overlay. */
+  startModelSelection(): void {
+    this.state.isSelectingModel = true;
+    this.emitChange();
+  }
+
+  /** Close the model selector overlay. */
+  finishModelSelection(): void {
+    this.state.isSelectingModel = false;
+    this.emitChange();
+  }
+
+  /** Select a new model: update state, close overlay, and notify listeners. */
+  selectModel(model: string): void {
+    this.state.model = model;
+    this.state.isSelectingModel = false;
+    this.emitChange();
+    this.emit("model-changed", model);
+  }
+
   /** Emit a quit request so the CLI entry point can perform graceful shutdown. */
   requestQuit(): void {
     this.emit("quit");
@@ -314,6 +341,7 @@ class UIStore extends EventEmitter {
     this.state.hotkeyInputLines = [];
     this.state.featureReviewActive = false;
     this.state.flashMessage = "";
+    this.state.isSelectingModel = false;
     this.state.statusMessage = "";
     this.emitChange();
   }

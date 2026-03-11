@@ -28,7 +28,7 @@ const POLL_INTERVAL_MS = 2_000;
 export class KaiBot {
   private readonly projectDir: string;
   private readonly featuresDir: string;
-  private readonly model: string;
+  private model: string;
 
   /** Timestamp (ms) when each feature file was first seen — used to enforce a
    *  minimum 2-second settle delay before processing begins. */
@@ -55,6 +55,11 @@ export class KaiBot {
     uiStore.setModel(this.model);
     uiStore.setStatus("watching");
     uiStore.setStatusMessage(`Watching ${this.featuresDir} for features…`);
+
+    // Listen for runtime model changes from the UI
+    uiStore.on("model-changed", (newModel: string) => {
+      this.model = newModel;
+    });
 
     while (this.running) {
       await this.checkForNewFeatures();

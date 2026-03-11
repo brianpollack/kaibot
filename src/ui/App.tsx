@@ -10,6 +10,7 @@ import {
   uiStore,
 } from "./store.js";
 import { reviewAndWriteFeature } from "../feature_creator.js";
+import { MODELS } from "../models.js";
 
 // ---------------------------------------------------------------------------
 // Hook: subscribe to UIStore changes
@@ -449,6 +450,10 @@ function HotkeyBar({
             </Text>
             <Text dimColor>{" New Feature  "}</Text>
             <Text color="cyan" bold>
+              {"[M]"}
+            </Text>
+            <Text dimColor>{" Model  "}</Text>
+            <Text color="cyan" bold>
               {"[Q]"}
             </Text>
             <Text dimColor>{" Quit"}</Text>
@@ -580,6 +585,100 @@ function FeatureInput({ lines, cols }: { lines: string[]; cols: number }): React
 }
 
 // ---------------------------------------------------------------------------
+// Model Selector — arrow/j/k navigation, Enter to confirm, Escape to cancel
+// ---------------------------------------------------------------------------
+
+function ModelSelector({
+  currentModel,
+  cols,
+}: {
+  currentModel: string;
+  cols: number;
+}): React.JSX.Element {
+  const models = MODELS;
+  const initialIndex = Math.max(
+    models.findIndex((m) => m.id === currentModel),
+    0,
+  );
+  const [selectedIndex, setSelectedIndex] = useState(initialIndex);
+
+  const handleInput = useCallback(
+    (
+      input: string,
+      key: {
+        upArrow?: boolean;
+        downArrow?: boolean;
+        return?: boolean;
+        escape?: boolean;
+      },
+    ) => {
+      if (key.escape) {
+        uiStore.finishModelSelection();
+        return;
+      }
+
+      if (key.return) {
+        const chosen = models[selectedIndex];
+        if (chosen.id !== currentModel) {
+          uiStore.selectModel(chosen.id);
+          uiStore.setFlashMessage(`Model changed to ${chosen.id}`);
+          setTimeout(() => uiStore.clearFlashMessage(), 3000);
+        } else {
+          uiStore.finishModelSelection();
+        }
+        return;
+      }
+
+      if (key.upArrow || input.toLowerCase() === "k") {
+        setSelectedIndex((i) => (i > 0 ? i - 1 : models.length - 1));
+        return;
+      }
+
+      if (key.downArrow || input.toLowerCase() === "j") {
+        setSelectedIndex((i) => (i < models.length - 1 ? i + 1 : 0));
+        return;
+      }
+    },
+    [selectedIndex, currentModel, models],
+  );
+
+  useInput(handleInput, { isActive: true });
+
+  const dividerWidth = Math.max(cols, 40);
+
+  return (
+    <Box flexDirection="column" paddingX={1}>
+      <Text bold color="cyan">
+        {"🧠 Select Model (↑/↓ or J/K to navigate, Enter to confirm, Esc to cancel):"}
+      </Text>
+      <Text dimColor>{"─".repeat(dividerWidth)}</Text>
+      {models.map((model, i) => {
+        const isSelected = i === selectedIndex;
+        const isCurrent = model.id === currentModel;
+        return (
+          <Box key={model.id}>
+            <Text color={isSelected ? "cyan" : "white"} bold={isSelected}>
+              {isSelected ? "  ▸ " : "    "}
+            </Text>
+            <Text color={isSelected ? "cyan" : "white"} bold={isSelected}>
+              {model.id}
+            </Text>
+            <Text dimColor>{" — " + model.description}</Text>
+            {isCurrent && (
+              <Text color="green" bold>
+                {" (active)"}
+              </Text>
+            )}
+          </Box>
+        );
+      })}
+      <Box height={1} />
+      <Text dimColor>{"  Press Enter to select, Escape to cancel"}</Text>
+    </Box>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main App
 // ---------------------------------------------------------------------------
 
@@ -608,6 +707,7 @@ export function App(): React.JSX.Element {
   const hotkeyActive =
     state.status === "watching" &&
     !state.hotkeyInputActive &&
+    !state.isSelectingModel &&
     !state.featureReviewActive &&
     !state.commitPrompt.visible;
 
@@ -624,6 +724,11 @@ export function App(): React.JSX.Element {
       if (input.toLowerCase() === "q") {
         uiStore.requestQuit();
       }
+
+      if (input.toLowerCase() === "m") {
+        uiStore.clearFlashMessage();
+        uiStore.startModelSelection();
+      }
     },
     [],
   );
@@ -633,6 +738,23 @@ export function App(): React.JSX.Element {
   // Split columns: left 60%, right 40%
   const leftCols = Math.floor(cols * 0.6);
   const rightCols = cols - leftCols;
+
+  // When model selector is active, show the model selection overlay.
+  if (state.isSelectingModel) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Header
+          status={state.status}
+          projectDir={state.projectDir}
+          model={state.model}
+          featureName={state.featureName}
+          featureStage={state.featureStage}
+          cols={cols}
+        />
+        <ModelSelector currentModel={state.model} cols={cols} />
+      </Box>
+    );
+  }
 
   // When hotkey input is active, show the feature input overlay instead of
   // the normal dashboard panels.

@@ -40,3 +40,6 @@ Subtracted 4 from the raw terminal column width at all four reading sites — tw
 March 11th, 2026: main: brian
 Implemented automatic inclusion of the target project's `CLAUDE.md` file in the agent system prompt. When KaiBot processes a feature, `KaiClient` now reads `{projectDir}/CLAUDE.md` (if it exists) and appends its content to the base system prompt with an "OVERRIDE" instruction header. This gives the agent project-specific context about conventions, patterns, and build instructions.
 
+March 11th, 2026: main: brian
+Implemented the **M hotkey model selector** feature. When the bot is in the "watching" state, pressing **M** opens a full-screen model selection overlay showing the available Claude models from the static `MODELS` list. Users can navigate with **↑/↓ arrow keys** or **J/K**, confirm with **Enter**, or cancel with **Escape**. The currently active model is marked with "(active)".
+
