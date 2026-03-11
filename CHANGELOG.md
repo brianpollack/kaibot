@@ -25,3 +25,6 @@ Implemented auto-generation of feature names from descriptions when `npm run fea
 March 10th, 2026: main: brian
 Implemented a hotkey menu system for KaiBot's watching state:
 
+March 10th, 2026: main: brian
+Added testing guidelines to the KaiBot agent system so that UI-related features (CLI apps, React components, styling, layout) and features that don't change logic will not have tests added automatically. The guidelines were added in two places:
+

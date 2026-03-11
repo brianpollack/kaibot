@@ -100,6 +100,7 @@ CLARIFY
 Important:
 - When writing the specification (READY), include clear instructions, acceptance criteria, and any technical notes that would help an implementing agent.
 - Do NOT include markdown headings like ## Plan or ## Summary — those are added later by the implementing agent.
+- If the feature is primarily UI work (CLI apps, React components, styling, layout) or does not change any logic, include a note in the specification that tests should NOT be added.
 - Keep your response concise and actionable.`;
 }
 

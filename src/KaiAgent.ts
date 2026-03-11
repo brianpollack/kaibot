@@ -36,7 +36,13 @@ function buildPrompt(feature: Feature, projectDir: string): string {
 
 5. When all steps are finished, **append a \`## Summary\` section** to the feature file with a brief description of what was implemented.
 
-Keep the feature file updated as you work — progress should be visible in real time.`;
+Keep the feature file updated as you work — progress should be visible in real time.
+
+## Testing guidelines
+
+- **Do NOT add tests** for features that are primarily User Interface work (CLI apps, React components, styling, layout, or other UI changes).
+- **Do NOT add tests** if the feature does not change any logic (e.g. prompt changes, configuration, cosmetic updates).
+- **Only add tests** when the feature introduces or modifies business logic, data transformations, or algorithmic behavior.`;
 }
 
 // ---------------------------------------------------------------------------
