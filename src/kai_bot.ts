@@ -2,16 +2,32 @@ import { existsSync } from "fs";
 import { resolve } from "path";
 
 import { KaiBot } from "./KaiBot.js";
+import { printModels } from "./models.js";
+import { mountUI, unmountUI } from "./ui/render.js";
+
+// ---------------------------------------------------------------------------
+// Subcommands
+// ---------------------------------------------------------------------------
+
+const subcommand = process.argv[2];
+
+if (subcommand === "models") {
+  await printModels();
+  process.exit(0);
+}
 
 // ---------------------------------------------------------------------------
 // Args
 // ---------------------------------------------------------------------------
 
-const projectDir = process.argv[2];
+const projectDir = subcommand;
 
 if (!projectDir) {
   console.error("Usage: tsx src/kai_bot.ts <project-directory>");
+  console.error("       tsx src/kai_bot.ts models");
   console.error("  Example: tsx src/kai_bot.ts /path/to/my-project");
+  console.error("\nSubcommands:");
+  console.error("  models   List available Claude models");
   console.error("\nEnvironment variables:");
   console.error("  ANTHROPIC_API_KEY  (required)");
   console.error("  KAI_MODEL          (optional, default: claude-opus-4-6)");
@@ -39,13 +55,17 @@ const model = process.env.KAI_MODEL ?? "claude-opus-4-6";
 
 const bot = new KaiBot(resolvedDir, model);
 
+// Mount the Ink UI
+mountUI();
+
 process.on("SIGINT", () => {
-  console.log("\nShutting down...");
+  unmountUI();
   bot.stop();
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
+  unmountUI();
   bot.stop();
   process.exit(0);
 });

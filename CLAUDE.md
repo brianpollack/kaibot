@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run bot -- /path/to/project   # Start the feature watcher bot
+npm run models       # List available Claude models
 npm run build        # Compile TypeScript to dist/
 npm run typecheck    # Type-check without emitting
 npm run lint         # ESLint

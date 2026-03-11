@@ -11,8 +11,13 @@ vi.mock("../KaiAgent.js", () => ({
   processFeature: vi.fn(),
 }));
 
+vi.mock("../changelog.js", () => ({
+  appendChangelog: vi.fn(),
+}));
+
 import { KaiBot } from "../KaiBot.js";
 import { processFeature } from "../KaiAgent.js";
+import { uiStore } from "../ui/store.js";
 
 const mockProcessFeature = vi.mocked(processFeature);
 
@@ -20,12 +25,17 @@ const mockProcessFeature = vi.mocked(processFeature);
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Allow fire-and-forget async operations to settle. */
-const flushPromises = () => new Promise<void>((r) => setTimeout(r, 50));
-
 /** Access private members for testing via any-cast. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const priv = (obj: unknown): any => obj;
+
+/**
+ * Pre-seed the seenAt map with an old timestamp so the settle delay is
+ * already satisfied on the next checkForNewFeatures() call.
+ */
+function bypassSettleDelay(bot: KaiBot, featureName: string): void {
+  (priv(bot).seenAt as Map<string, number>).set(featureName, Date.now() - 10_000);
+}
 
 let tmpDir: string;
 let featuresDir: string;
@@ -76,7 +86,6 @@ describe("KaiBot — checkForNewFeatures", () => {
 
     const bot = new KaiBot(tmpDir);
     await priv(bot).checkForNewFeatures();
-    await flushPromises();
 
     expect(mockProcessFeature).not.toHaveBeenCalled();
   });
@@ -86,7 +95,6 @@ describe("KaiBot — checkForNewFeatures", () => {
 
     const bot = new KaiBot(tmpDir);
     await priv(bot).checkForNewFeatures();
-    await flushPromises();
 
     expect(mockProcessFeature).not.toHaveBeenCalled();
   });
@@ -96,23 +104,24 @@ describe("KaiBot — checkForNewFeatures", () => {
 
     const bot = new KaiBot(tmpDir);
     await priv(bot).checkForNewFeatures();
-    await flushPromises();
 
     expect(mockProcessFeature).not.toHaveBeenCalled();
   });
 
-  it("prints the filename when a new feature file is found", async () => {
-    mockProcessFeature.mockResolvedValueOnce(undefined);
-    const spy = vi.spyOn(console, "log");
+  it("updates UI status when a new feature file is found", async () => {
+    let capturedStatus = "";
+    mockProcessFeature.mockImplementation(async () => {
+      // Capture the status message while the feature is being processed
+      capturedStatus = uiStore.getState().statusMessage;
+    });
 
     writeFileSync(join(featuresDir, "new_user.md"), "# New User\n");
 
     const bot = new KaiBot(tmpDir);
+    bypassSettleDelay(bot, "new_user");
     await priv(bot).checkForNewFeatures();
-    await flushPromises();
 
-    expect(spy).toHaveBeenCalledWith("Found new feature file: new_user.md");
-    spy.mockRestore();
+    expect(capturedStatus).toContain("new_user");
   });
 
   it("detects a new .md file and calls processFeature", async () => {
@@ -120,38 +129,13 @@ describe("KaiBot — checkForNewFeatures", () => {
     writeFileSync(join(featuresDir, "new_user.md"), "# New User\n");
 
     const bot = new KaiBot(tmpDir);
+    bypassSettleDelay(bot, "new_user");
     await priv(bot).checkForNewFeatures();
-    await flushPromises();
 
     expect(mockProcessFeature).toHaveBeenCalledOnce();
     const [feature, projectDir] = mockProcessFeature.mock.calls[0];
     expect(feature.name).toBe("new_user");
     expect(projectDir).toBe(tmpDir);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Double-processing prevention
-// ---------------------------------------------------------------------------
-
-describe("KaiBot — double-processing prevention", () => {
-  it("does not process the same feature twice if already in processing set", async () => {
-    // Never resolve — simulates a long-running agent
-    mockProcessFeature.mockImplementation(() => new Promise(() => {}));
-
-    writeFileSync(join(featuresDir, "slow_feature.md"), "# Slow\n");
-
-    const bot = new KaiBot(tmpDir);
-
-    // First poll
-    await priv(bot).checkForNewFeatures();
-    await flushPromises();
-
-    // Second poll — feature is now _inprogress but name still in processing set
-    await priv(bot).checkForNewFeatures();
-    await flushPromises();
-
-    expect(mockProcessFeature).toHaveBeenCalledOnce();
   });
 });
 
@@ -175,8 +159,8 @@ describe("KaiBot — handleFeature state transitions", () => {
     writeFileSync(join(featuresDir, "auth_flow.md"), "# Auth Flow\n");
 
     const bot = new KaiBot(tmpDir);
+    bypassSettleDelay(bot, "auth_flow");
     await priv(bot).checkForNewFeatures();
-    await flushPromises();
 
     expect(capturedFilePath).toMatch(/_inprogress\.md$/);
     expect(inprogressExistedDuringCall).toBe(true);
@@ -189,8 +173,8 @@ describe("KaiBot — handleFeature state transitions", () => {
     writeFileSync(join(featuresDir, "auth_flow.md"), "# Auth Flow\n");
 
     const bot = new KaiBot(tmpDir);
+    bypassSettleDelay(bot, "auth_flow");
     await priv(bot).checkForNewFeatures();
-    await flushPromises();
 
     expect(existsSync(join(featuresDir, "auth_flow_complete.md"))).toBe(true);
     expect(existsSync(join(featuresDir, "auth_flow_inprogress.md"))).toBe(false);
@@ -202,59 +186,20 @@ describe("KaiBot — handleFeature state transitions", () => {
     writeFileSync(join(featuresDir, "broken_feature.md"), "# Broken\n");
 
     const bot = new KaiBot(tmpDir);
+    bypassSettleDelay(bot, "broken_feature");
     await priv(bot).checkForNewFeatures();
-    await flushPromises();
 
     expect(existsSync(join(featuresDir, "broken_feature_inprogress.md"))).toBe(true);
     expect(existsSync(join(featuresDir, "broken_feature_complete.md"))).toBe(false);
   });
-
-  it("removes feature name from processing set after completion", async () => {
-    // Use a deferred promise so we can observe the processing set mid-flight
-    let resolveFeature!: () => void;
-    const featurePromise = new Promise<void>((r) => { resolveFeature = r; });
-    mockProcessFeature.mockReturnValueOnce(featurePromise);
-
-    writeFileSync(join(featuresDir, "cleanup.md"), "# Cleanup\n");
-
-    const bot = new KaiBot(tmpDir);
-    const processing = priv(bot).processing as Set<string>;
-
-    await priv(bot).checkForNewFeatures();
-    // After checkForNewFeatures the name is in the set (handleFeature still running)
-    expect(processing.has("cleanup")).toBe(true);
-
-    // Let handleFeature complete
-    resolveFeature();
-    await flushPromises();
-    expect(processing.has("cleanup")).toBe(false);
-  });
-
-  it("removes feature name from processing set after error", async () => {
-    let rejectFeature!: (err: Error) => void;
-    const featurePromise = new Promise<void>((_, r) => { rejectFeature = r; });
-    mockProcessFeature.mockReturnValueOnce(featurePromise);
-
-    writeFileSync(join(featuresDir, "errored.md"), "# Errored\n");
-
-    const bot = new KaiBot(tmpDir);
-    const processing = priv(bot).processing as Set<string>;
-
-    await priv(bot).checkForNewFeatures();
-    expect(processing.has("errored")).toBe(true);
-
-    rejectFeature(new Error("fail"));
-    await flushPromises();
-    expect(processing.has("errored")).toBe(false);
-  });
 });
 
 // ---------------------------------------------------------------------------
-// Multiple features
+// Sequential processing — one at a time
 // ---------------------------------------------------------------------------
 
-describe("KaiBot — multiple features", () => {
-  it("processes multiple new features concurrently", async () => {
+describe("KaiBot — sequential processing", () => {
+  it("processes only one feature per checkForNewFeatures call", async () => {
     mockProcessFeature.mockResolvedValue(undefined);
 
     writeFileSync(join(featuresDir, "feature_a.md"), "# A\n");
@@ -262,11 +207,62 @@ describe("KaiBot — multiple features", () => {
     writeFileSync(join(featuresDir, "feature_c.md"), "# C\n");
 
     const bot = new KaiBot(tmpDir);
-    await priv(bot).checkForNewFeatures();
-    await flushPromises();
+    bypassSettleDelay(bot, "feature_a");
+    bypassSettleDelay(bot, "feature_b");
+    bypassSettleDelay(bot, "feature_c");
 
-    expect(mockProcessFeature).toHaveBeenCalledTimes(3);
+    // First poll — processes exactly one feature
+    await priv(bot).checkForNewFeatures();
+    expect(mockProcessFeature).toHaveBeenCalledTimes(1);
+  });
+
+  it("processes all features across multiple poll cycles", async () => {
+    mockProcessFeature.mockResolvedValue(undefined);
+
+    writeFileSync(join(featuresDir, "feature_a.md"), "# A\n");
+    writeFileSync(join(featuresDir, "feature_b.md"), "# B\n");
+
+    const bot = new KaiBot(tmpDir);
+    bypassSettleDelay(bot, "feature_a");
+    bypassSettleDelay(bot, "feature_b");
+
+    // First poll — one feature
+    await priv(bot).checkForNewFeatures();
+    expect(mockProcessFeature).toHaveBeenCalledTimes(1);
+
+    // Second poll — the other feature
+    await priv(bot).checkForNewFeatures();
+    expect(mockProcessFeature).toHaveBeenCalledTimes(2);
+
     const names = mockProcessFeature.mock.calls.map((c) => c[0].name).sort();
-    expect(names).toEqual(["feature_a", "feature_b", "feature_c"]);
+    expect(names).toEqual(["feature_a", "feature_b"]);
+  });
+
+  it("blocks the poll loop while a feature is being processed", async () => {
+    const callOrder: string[] = [];
+
+    mockProcessFeature.mockImplementation(async (feature) => {
+      callOrder.push(`start:${feature.name}`);
+      // Simulate some work
+      await new Promise<void>((r) => setTimeout(r, 10));
+      callOrder.push(`end:${feature.name}`);
+    });
+
+    writeFileSync(join(featuresDir, "feature_x.md"), "# X\n");
+    writeFileSync(join(featuresDir, "feature_y.md"), "# Y\n");
+
+    const bot = new KaiBot(tmpDir);
+    bypassSettleDelay(bot, "feature_x");
+    bypassSettleDelay(bot, "feature_y");
+
+    // Two sequential polls
+    await priv(bot).checkForNewFeatures();
+    await priv(bot).checkForNewFeatures();
+
+    // Each feature fully completes before the next starts
+    expect(callOrder[0]).toMatch(/^start:/);
+    expect(callOrder[1]).toMatch(/^end:/);
+    expect(callOrder[2]).toMatch(/^start:/);
+    expect(callOrder[3]).toMatch(/^end:/);
   });
 });

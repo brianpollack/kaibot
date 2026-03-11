@@ -1,8 +1,10 @@
-import { existsSync, mkdirSync, readdirSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
+import { appendChangelog } from "./changelog.js";
 import { isNewFeatureFile, markComplete, markInProgress, parseFeature } from "./feature.js";
 import { processFeature } from "./KaiAgent.js";
+import { uiStore } from "./ui/store.js";
 
 const POLL_INTERVAL_MS = 2_000;
 
@@ -18,16 +20,18 @@ const POLL_INTERVAL_MS = 2_000;
  *     → new_feature_inprogress.md  (agent plans + executes)
  *     → new_feature_complete.md    (on success)
  *
- * Each feature is processed concurrently; errors are logged and the file is
- * left as _inprogress for manual inspection / retry.
+ * Features are processed one at a time in the order they are discovered.
+ * Errors are logged and the file is left as _inprogress for manual
+ * inspection / retry.
  */
 export class KaiBot {
   private readonly projectDir: string;
   private readonly featuresDir: string;
   private readonly model: string;
 
-  /** Names of features currently being processed — prevents double-processing. */
-  private readonly processing = new Set<string>();
+  /** Timestamp (ms) when each feature file was first seen — used to enforce a
+   *  minimum 2-second settle delay before processing begins. */
+  private readonly seenAt = new Map<string, number>();
 
   private running = false;
 
@@ -46,11 +50,10 @@ export class KaiBot {
     this.ensureFeaturesDir();
     this.running = true;
 
-    console.log(`KaiBot started`);
-    console.log(`  Project : ${this.projectDir}`);
-    console.log(`  Watching: ${this.featuresDir}`);
-    console.log(`  Model   : ${this.model}`);
-    console.log(`\nDrop a .md file into ${this.featuresDir} to queue a feature.\n`);
+    uiStore.setProjectDir(this.projectDir);
+    uiStore.setModel(this.model);
+    uiStore.setStatus("watching");
+    uiStore.setStatusMessage(`Watching ${this.featuresDir} for features…`);
 
     while (this.running) {
       await this.checkForNewFeatures();
@@ -70,7 +73,6 @@ export class KaiBot {
   private ensureFeaturesDir(): void {
     if (!existsSync(this.featuresDir)) {
       mkdirSync(this.featuresDir, { recursive: true });
-      console.log(`Created: ${this.featuresDir}`);
     }
   }
 
@@ -82,15 +84,36 @@ export class KaiBot {
       return; // directory temporarily unavailable
     }
 
+    const now = Date.now();
+
     for (const file of files) {
       if (!isNewFeatureFile(file)) continue;
 
       const feature = parseFeature(join(this.featuresDir, file));
-      if (this.processing.has(feature.name)) continue;
 
-      console.log(`Found new feature file: ${file}`);
-      this.processing.add(feature.name);
-      void this.handleFeature(join(this.featuresDir, file));
+      // Record first-seen timestamp; skip this cycle so the file can settle.
+      if (!this.seenAt.has(feature.name)) {
+        uiStore.setStatusMessage(`Found: ${file} (waiting for file to settle…)`);
+        this.seenAt.set(feature.name, now);
+        continue;
+      }
+
+      // Enforce at least 2 seconds since first seen.
+      if (now - this.seenAt.get(feature.name)! < POLL_INTERVAL_MS) continue;
+
+      // Check that the file has content; if empty, wait another cycle.
+      const content = readFileSync(join(this.featuresDir, file), "utf8").trim();
+      if (content.length === 0) {
+        uiStore.setStatusMessage(`Feature file is empty, waiting: ${file}`);
+        continue;
+      }
+
+      this.seenAt.delete(feature.name);
+      uiStore.setStatusMessage(`Processing: ${file}`);
+
+      // Process one feature at a time — await it before scanning for more.
+      await this.handleFeature(join(this.featuresDir, file));
+      return;
     }
   }
 
@@ -98,28 +121,36 @@ export class KaiBot {
     let feature = parseFeature(filePath);
 
     try {
-      console.log(`\n>>> New feature: ${feature.name}`);
+      uiStore.setStatus("processing");
+      uiStore.setFeatureName(feature.name);
+      uiStore.setStatusMessage(`Processing: ${feature.name}`);
 
       feature = markInProgress(feature);
-      console.log(`    Renamed to: ${feature.filePath}`);
 
       await processFeature(feature, this.projectDir, this.model);
 
       feature = markComplete(feature);
-      console.log(`\n>>> Complete: ${feature.filePath}\n`);
+      appendChangelog(feature, this.projectDir);
+      uiStore.setStatusMessage(`Complete: ${feature.name}`);
+      uiStore.resetFeature();
+      uiStore.setStatus("watching");
+      uiStore.setStatusMessage(`Watching ${this.featuresDir} for features…`);
     } catch (err) {
       if (isAuthError(err)) {
-        console.error(`\n>>> Authentication error: ${err}`);
-        console.error(
-          "    Check that ANTHROPIC_API_KEY is valid at https://console.anthropic.com/",
+        uiStore.setStatus("error");
+        uiStore.setStatusMessage(
+          "Authentication error — check ANTHROPIC_API_KEY at https://console.anthropic.com/",
         );
         this.stop();
         process.exit(1);
       }
-      console.error(`\n>>> Error processing "${feature.name}": ${err}`);
-      console.error(`    File left at: ${feature.filePath} for inspection.\n`);
-    } finally {
-      this.processing.delete(feature.name);
+      uiStore.setStatus("error");
+      uiStore.setStatusMessage(
+        `Error processing "${feature.name}" — file left at: ${feature.filePath}`,
+      );
+      // Reset to watching after a brief pause so the error is visible
+      uiStore.setStatus("watching");
+      uiStore.setStatusMessage(`Watching ${this.featuresDir} for features…`);
     }
   }
 }

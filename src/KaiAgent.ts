@@ -1,9 +1,11 @@
 import { appendFileSync } from "fs";
+import { basename } from "path";
 
 import type { SDKAssistantMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 
 import { type Feature } from "./feature.js";
 import { KaiClient } from "./KaiClient.js";
+import { uiStore } from "./ui/store.js";
 
 // ---------------------------------------------------------------------------
 // Prompt
@@ -56,8 +58,12 @@ export async function processFeature(
   const prompt = buildPrompt(feature, projectDir);
   const startTime = Date.now();
 
-  console.log(`\n[KaiAgent] Starting feature: ${feature.name}`);
-  console.log(`[KaiAgent] File: ${feature.filePath}\n`);
+  uiStore.setFeatureName(feature.name);
+  uiStore.setFeatureStage("reading");
+  uiStore.setStatusMessage(`Starting feature: ${feature.name}`);
+
+  let hasSeenToolUse = false;
+  let hasSeenEdit = false;
 
   for await (const msg of client.query(prompt)) {
     // Stream assistant text and log tool calls
@@ -66,11 +72,28 @@ export async function processFeature(
       for (const block of message.content) {
         const b = block as Record<string, unknown>;
         if (b.type === "text" && typeof b.text === "string") {
-          process.stdout.write(b.text);
+          // Transition to "thinking" once the agent starts producing text
+          if (!hasSeenToolUse) {
+            uiStore.setFeatureStage("thinking");
+          }
+          // Detect plan section being written
+          if (b.text.includes("## Plan")) {
+            uiStore.setFeatureStage("planning");
+          }
+          uiStore.appendThinking(b.text);
         } else if (b.type === "tool_use" && typeof b.name === "string") {
-          const inputStr = JSON.stringify(b.input);
-          const preview = inputStr.length > 120 ? `${inputStr.slice(0, 120)}…` : inputStr;
-          console.log(`\n  [Tool: ${b.name}] ${preview}`);
+          hasSeenToolUse = true;
+          // Transition to "executing" once edits/writes start (past planning)
+          if (!hasSeenEdit && (b.name === "Edit" || b.name === "Write")) {
+            hasSeenEdit = true;
+            uiStore.setFeatureStage("executing");
+          }
+          // Stay in "reading" stage while only reading files
+          if (!hasSeenEdit && (b.name === "Read" || b.name === "Glob" || b.name === "Grep")) {
+            uiStore.setFeatureStage("reading");
+          }
+          const input = b.input as Record<string, unknown> | undefined;
+          routeToolUse(b.name, input);
         }
       }
     }
@@ -78,16 +101,19 @@ export async function processFeature(
     // Handle completion
     if (msg.type === "result") {
       const result = msg as SDKResultMessage;
-      console.log(); // newline after streamed text
       if (result.subtype !== "success") {
+        uiStore.setStatusMessage(
+          `Feature failed (${result.subtype}): ${result.errors.join(", ")}`,
+        );
         throw new Error(
           `[KaiAgent] Feature failed (${result.subtype}): ${result.errors.join(", ")}`,
         );
       }
+      uiStore.setFeatureStage("complete");
       const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
       const costStr = `$${result.total_cost_usd.toFixed(4)}`;
-      console.log(
-        `[KaiAgent] Done — cost: ${costStr}, turns: ${result.num_turns}, time: ${elapsedSec}s`,
+      uiStore.setStatusMessage(
+        `Done — cost: ${costStr}, turns: ${result.num_turns}, time: ${elapsedSec}s`,
       );
       appendFileSync(
         feature.filePath,
@@ -95,4 +121,43 @@ export async function processFeature(
       );
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Route tool-use blocks to the appropriate UI panels
+// ---------------------------------------------------------------------------
+
+const FILE_TOOLS = new Set(["Read", "Write", "Edit"]);
+
+function routeToolUse(name: string, input: Record<string, unknown> | undefined): void {
+  if (name === "Bash") {
+    const cmd = typeof input?.command === "string" ? input.command : "(unknown)";
+    uiStore.pushCommand(cmd);
+  } else if (FILE_TOOLS.has(name)) {
+    const filePath =
+      typeof input?.file_path === "string" ? input.file_path : "(unknown)";
+    const opType = name.toLowerCase() as "read" | "write" | "edit";
+    const preview = getFileOpPreview(name, input);
+    uiStore.pushFileOp({ type: opType, path: basename(filePath), preview });
+  } else {
+    // Other tools (Glob, Grep, etc.) show as commands
+    const inputStr = JSON.stringify(input);
+    const preview = inputStr.length > 60 ? `${inputStr.slice(0, 60)}…` : inputStr;
+    uiStore.pushCommand(`${name}: ${preview}`);
+  }
+}
+
+function getFileOpPreview(toolName: string, input: Record<string, unknown> | undefined): string {
+  if (!input) return "";
+  if (toolName === "Edit") {
+    return typeof input.old_string === "string"
+      ? input.old_string.slice(0, 30).replace(/\n/g, " ")
+      : "";
+  }
+  if (toolName === "Write") {
+    return typeof input.content === "string"
+      ? input.content.slice(0, 30).replace(/\n/g, " ")
+      : "";
+  }
+  return "";
 }
