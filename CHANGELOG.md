@@ -49,3 +49,6 @@ Changed the git commit message to use the original feature description (the cont
 March 11th, 2026: main: brian
 Updated `buildCommitMessage` in `src/commit.ts` to return the feature description directly as the commit message, removing the `feat: ` prefix that was previously prepended. The commit message now uses the raw feature description extracted from the feature file content (text before any `## Plan`, `## Summary`, or `## Metadata` sections). Updated all corresponding test assertions in `src/__tests__/commit.test.ts` to match.
 
+March 11th, 2026: main: brian
+This feature was already fully implemented in prior commits. The `buildCommitMessage()` function in `src/commit.ts` uses `extractFeatureDescription()` to extract the original feature description (all non-empty content lines before any `## Plan`, `## Summary`, or `## Metadata` section) and uses that as the git commit message. The feature name is used as a fallback if the file is unreadable or has no description content. All 12 existing tests pass and confirm this behavior.
+
