@@ -73,7 +73,7 @@ export function buildCommitMessage(feature: Feature): string {
   } catch {
     // Fall back to feature name
   }
-  return `feat: ${description}`;
+  return description;
 }
 
 // ---------------------------------------------------------------------------

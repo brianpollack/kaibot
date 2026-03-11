@@ -111,7 +111,7 @@ describe("buildCommitMessage", () => {
       "Add a cool widget to the dashboard\n\n## Plan\n\n- [x] 1. Did it\n\n## Summary\n\nAdded a cool widget.\n",
     );
     const msg = buildCommitMessage(feature);
-    expect(msg).toBe("feat: Add a cool widget to the dashboard");
+    expect(msg).toBe("Add a cool widget to the dashboard");
   });
 
   it("falls back to feature name when file is unreadable", () => {
@@ -121,7 +121,7 @@ describe("buildCommitMessage", () => {
       filePath: join(tmpDir, "nonexistent.md"),
     };
     const msg = buildCommitMessage(feature);
-    expect(msg).toBe("feat: missing_feature");
+    expect(msg).toBe("missing_feature");
   });
 });
 
@@ -173,7 +173,7 @@ describe("promptAndCommit", () => {
 
     // Verify the commit was created with the feature description (not the summary)
     const log = execSync("git log --oneline -1", { cwd: tmpDir, encoding: "utf8" });
-    expect(log).toContain("feat: Add widget to the dashboard");
+    expect(log).toContain("Add widget to the dashboard");
   });
 
   it("does not commit when user declines", async () => {
@@ -192,6 +192,6 @@ describe("promptAndCommit", () => {
 
     // Verify no new commit was created (last commit should still be 'init')
     const log = execSync("git log --oneline -1", { cwd: tmpDir, encoding: "utf8" });
-    expect(log).not.toContain("feat:");
+    expect(log).not.toContain("Add widget to the dashboard");
   });
 });

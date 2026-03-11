@@ -46,3 +46,6 @@ Implemented the **M hotkey model selector** feature. When the bot is in the "wat
 March 11th, 2026: main: brian
 Changed the git commit message to use the original feature description (the content at the top of the feature file, before `## Plan`/`## Summary`/`## Metadata` sections) instead of the agent-generated summary. Added `extractFeatureDescription()` function to `src/commit.ts` and removed the dependency on `extractDescription` from `changelog.ts`. Updated all tests in `src/__tests__/commit.test.ts` with 6 new unit tests for the extraction function.
 
+March 11th, 2026: main: brian
+Updated `buildCommitMessage` in `src/commit.ts` to return the feature description directly as the commit message, removing the `feat: ` prefix that was previously prepended. The commit message now uses the raw feature description extracted from the feature file content (text before any `## Plan`, `## Summary`, or `## Metadata` sections). Updated all corresponding test assertions in `src/__tests__/commit.test.ts` to match.
+
