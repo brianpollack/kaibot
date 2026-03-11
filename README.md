@@ -18,11 +18,12 @@ export KAI_MODEL=claude-opus-4-6   # optional, this is the default
 
 | Command                           | Description                                                   |
 |-----------------------------------|---------------------------------------------------------------|
-| `npm run bot -- /path/to/project` | Watch a project's `features/` dir and process new `.md` files |
-| `npm run local`                   | Same as `bot` but targets the current directory (`.`)         |
-| `npm run models`                  | List available Claude models with copy-paste `export` commands |
-| `npm run dev`                     | Run the dev entry point (`src/index.ts`) via tsx              |
-| `npm start`                       | Run the compiled bot from `dist/index.js` (requires a build)  |
+| `npm run bot -- /path/to/project`            | Watch a project's `features/` dir and process new `.md` files |
+| `npm run local`                              | Same as `bot` but targets the current directory (`.`)         |
+| `npm run feature -- Add user authentication` | Create a new feature file interactively with AI review        |
+| `npm run models`                             | List available Claude models with copy-paste `export` commands |
+| `npm run dev`                                | Run the dev entry point (`src/index.ts`) via tsx              |
+| `npm start`                                  | Run the compiled bot from `dist/index.js` (requires a build)  |
 
 ### Development
 

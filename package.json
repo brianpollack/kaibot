@@ -10,6 +10,7 @@
     "dev": "tsx src/index.ts",
     "bot": "tsx src/kai_bot.ts",
     "local": "tsx src/kai_bot.ts .",
+    "feature": "tsx src/kai_bot.ts feature",
     "models": "tsx src/kai_bot.ts models",
     "start": "node dist/index.js",
     "lint": "eslint src",
