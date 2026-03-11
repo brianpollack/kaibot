@@ -1,7 +1,6 @@
 import { execSync } from "child_process";
 
 import type { Feature } from "./feature.js";
-import { extractDescription } from "./changelog.js";
 import { uiStore } from "./ui/store.js";
 import { readFileSync } from "fs";
 
@@ -37,12 +36,40 @@ function hasChanges(cwd: string): boolean {
   }
 }
 
+/**
+ * Extracts the original feature description from a feature file.
+ *
+ * Returns all non-empty content lines before any `## Plan`, `## Summary`, or
+ * `## Metadata` section, joined into a single string. Falls back to the
+ * provided fallback value if no description is found.
+ */
+export function extractFeatureDescription(
+  content: string,
+  fallback: string,
+): string {
+  const lines = content.split("\n");
+  const descriptionLines: string[] = [];
+
+  for (const line of lines) {
+    // Stop at agent-generated sections
+    if (/^##\s+(Plan|Summary|Metadata)/i.test(line)) break;
+    const trimmed = line.trim();
+    if (trimmed.length > 0) {
+      descriptionLines.push(trimmed);
+    }
+  }
+
+  return descriptionLines.length > 0
+    ? descriptionLines.join(" ")
+    : fallback;
+}
+
 /** Build a commit message from the completed feature. */
 export function buildCommitMessage(feature: Feature): string {
   let description = feature.name;
   try {
     const content = readFileSync(feature.filePath, "utf8");
-    description = extractDescription(content, feature.name);
+    description = extractFeatureDescription(content, feature.name);
   } catch {
     // Fall back to feature name
   }

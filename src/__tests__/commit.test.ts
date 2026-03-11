@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildCommitMessage } from "../commit.js";
+import { buildCommitMessage, extractFeatureDescription } from "../commit.js";
 import type { Feature } from "../feature.js";
 
 // ---------------------------------------------------------------------------
@@ -64,15 +64,54 @@ afterEach(() => {
 // buildCommitMessage
 // ---------------------------------------------------------------------------
 
+describe("extractFeatureDescription", () => {
+  it("extracts content before ## Plan section", () => {
+    const content =
+      "Add a dark mode toggle to settings\n\n## Plan\n\n- [x] 1. Do stuff\n\n## Summary\n\nDone.\n";
+    expect(extractFeatureDescription(content, "fallback")).toBe(
+      "Add a dark mode toggle to settings",
+    );
+  });
+
+  it("extracts multi-line description joined with spaces", () => {
+    const content =
+      "When committing changes to git\nuse the feature description as commit text\n\n## Plan\n\n- [x] 1. Step\n";
+    expect(extractFeatureDescription(content, "fallback")).toBe(
+      "When committing changes to git use the feature description as commit text",
+    );
+  });
+
+  it("stops at ## Summary if no ## Plan", () => {
+    const content = "Fix the login bug\n\n## Summary\n\nFixed it.\n";
+    expect(extractFeatureDescription(content, "fallback")).toBe(
+      "Fix the login bug",
+    );
+  });
+
+  it("stops at ## Metadata", () => {
+    const content = "Update deps\n\n## Metadata\n\n- Model: opus\n";
+    expect(extractFeatureDescription(content, "fallback")).toBe("Update deps");
+  });
+
+  it("returns fallback when content is empty", () => {
+    expect(extractFeatureDescription("", "my_feature")).toBe("my_feature");
+  });
+
+  it("returns fallback when content is only sections", () => {
+    const content = "## Plan\n\n- [x] 1. Step\n";
+    expect(extractFeatureDescription(content, "my_feature")).toBe("my_feature");
+  });
+});
+
 describe("buildCommitMessage", () => {
-  it("uses the Summary section from the feature file", () => {
+  it("uses the feature description (content before ## Plan)", () => {
     const feature = makeFeature(
       tmpDir,
       "my_feature",
-      "# Feature\n\n## Summary\n\nAdded a cool widget to the dashboard.\n",
+      "Add a cool widget to the dashboard\n\n## Plan\n\n- [x] 1. Did it\n\n## Summary\n\nAdded a cool widget.\n",
     );
     const msg = buildCommitMessage(feature);
-    expect(msg).toBe("feat: Added a cool widget to the dashboard.");
+    expect(msg).toBe("feat: Add a cool widget to the dashboard");
   });
 
   it("falls back to feature name when file is unreadable", () => {
@@ -119,7 +158,11 @@ describe("promptAndCommit", () => {
 
   it("commits when user confirms", async () => {
     initGitRepo(tmpDir);
-    const feature = makeFeature(tmpDir, "widget", "# Widget\n\n## Summary\n\nAdded widget.\n");
+    const feature = makeFeature(
+      tmpDir,
+      "widget",
+      "Add widget to the dashboard\n\n## Plan\n\n- [x] 1. Did it\n\n## Summary\n\nAdded widget.\n",
+    );
     // Create an uncommitted file
     writeFileSync(join(tmpDir, "new_file.ts"), "export const x = 1;\n");
 
@@ -128,14 +171,18 @@ describe("promptAndCommit", () => {
     const result = await promptAndCommit(feature, tmpDir);
     expect(result).toBe(true);
 
-    // Verify the commit was created
+    // Verify the commit was created with the feature description (not the summary)
     const log = execSync("git log --oneline -1", { cwd: tmpDir, encoding: "utf8" });
-    expect(log).toContain("feat: Added widget.");
+    expect(log).toContain("feat: Add widget to the dashboard");
   });
 
   it("does not commit when user declines", async () => {
     initGitRepo(tmpDir);
-    const feature = makeFeature(tmpDir, "widget", "# Widget\n\n## Summary\n\nAdded widget.\n");
+    const feature = makeFeature(
+      tmpDir,
+      "widget",
+      "Add widget to the dashboard\n\n## Summary\n\nAdded widget.\n",
+    );
     writeFileSync(join(tmpDir, "new_file.ts"), "export const x = 1;\n");
 
     mockStore.showCommitPrompt.mockResolvedValueOnce(false);

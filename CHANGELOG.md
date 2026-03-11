@@ -43,3 +43,6 @@ Implemented automatic inclusion of the target project's `CLAUDE.md` file in the 
 March 11th, 2026: main: brian
 Implemented the **M hotkey model selector** feature. When the bot is in the "watching" state, pressing **M** opens a full-screen model selection overlay showing the available Claude models from the static `MODELS` list. Users can navigate with **↑/↓ arrow keys** or **J/K**, confirm with **Enter**, or cancel with **Escape**. The currently active model is marked with "(active)".
 
+March 11th, 2026: main: brian
+Changed the git commit message to use the original feature description (the content at the top of the feature file, before `## Plan`/`## Summary`/`## Metadata` sections) instead of the agent-generated summary. Added `extractFeatureDescription()` function to `src/commit.ts` and removed the dependency on `extractDescription` from `changelog.ts`. Updated all tests in `src/__tests__/commit.test.ts` with 6 new unit tests for the extraction function.
+
