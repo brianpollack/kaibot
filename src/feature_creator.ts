@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
 import { KaiClient } from "./KaiClient.js";
+import { getLinearConfigFromEnv, LocalLinearClient } from "./linear.js";
 import { slugify } from "./slugify.js";
 
 // ---------------------------------------------------------------------------
@@ -10,9 +11,34 @@ import { slugify } from "./slugify.js";
 // ---------------------------------------------------------------------------
 
 const STOP_WORDS = new Set([
-  "the", "a", "an", "and", "or", "to", "for", "in", "on", "with",
-  "is", "it", "of", "by", "as", "at", "be", "if", "so", "no",
-  "not", "but", "from", "that", "this", "then", "than", "into",
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "to",
+  "for",
+  "in",
+  "on",
+  "with",
+  "is",
+  "it",
+  "of",
+  "by",
+  "as",
+  "at",
+  "be",
+  "if",
+  "so",
+  "no",
+  "not",
+  "but",
+  "from",
+  "that",
+  "this",
+  "then",
+  "than",
+  "into",
 ]);
 
 /**
@@ -227,7 +253,11 @@ export function writeFeatureFromDescription(
  * instead of asking for clarification — used when interactive clarification
  * is not available (e.g. the hotkey UI).
  */
-function buildNoClarifyRetryPrompt(featureName: string, details: string, questions: string): string {
+function buildNoClarifyRetryPrompt(
+  featureName: string,
+  details: string,
+  questions: string,
+): string {
   return `You are helping a developer write a feature specification.
 
 Feature: "${featureName}"
@@ -270,22 +300,9 @@ export async function reviewAndWriteFeature(
   const text = description.trim();
   if (!text) return { path: null, reviewed: false };
 
-  const featuresDir = join(projectDir, "features");
-  mkdirSync(featuresDir, { recursive: true });
-
   const name = deriveFeatureName(text);
   const slug = slugify(name);
   if (!slug) return { path: null, reviewed: false };
-
-  // Deduplicate: if slug.md exists, try slug_2.md, slug_3.md, …
-  let filePath = join(featuresDir, `${slug}.md`);
-  let suffix = 1;
-  while (existsSync(filePath)) {
-    suffix++;
-    filePath = join(featuresDir, `${slug}_${suffix}.md`);
-  }
-  const finalSlug = suffix > 1 ? `${slug}_${suffix}` : slug;
-  const displayPath = `features/${finalSlug}.md`;
 
   // Attempt agent review
   let reviewed = false;
@@ -310,6 +327,24 @@ export async function reviewAndWriteFeature(
   } catch {
     // Fall back to raw description on any error
   }
+
+  const linearIssue = await tryCreateLinearIssue(name, content);
+  if (linearIssue) {
+    return { path: `linear/${linearIssue}`, reviewed };
+  }
+
+  const featuresDir = join(projectDir, "features");
+  mkdirSync(featuresDir, { recursive: true });
+
+  // Deduplicate: if slug.md exists, try slug_2.md, slug_3.md, …
+  let filePath = join(featuresDir, `${slug}.md`);
+  let suffix = 1;
+  while (existsSync(filePath)) {
+    suffix++;
+    filePath = join(featuresDir, `${slug}_${suffix}.md`);
+  }
+  const finalSlug = suffix > 1 ? `${slug}_${suffix}` : slug;
+  const displayPath = `features/${finalSlug}.md`;
 
   writeFileSync(filePath, content + "\n");
   return { path: displayPath, reviewed };
@@ -336,11 +371,12 @@ export async function createFeature(
   model: string,
 ): Promise<string> {
   const hasName = nameWords.length > 0;
-
+  const linearConfigured = Boolean(getLinearConfigFromEnv());
   const featuresDir = join(projectDir, "features");
 
-  // Ensure features/ directory exists
-  mkdirSync(featuresDir, { recursive: true });
+  if (!linearConfigured) {
+    mkdirSync(featuresDir, { recursive: true });
+  }
 
   const rl = createRL();
 
@@ -359,14 +395,16 @@ export async function createFeature(
         process.exit(1);
       }
 
-      const filePath = join(featuresDir, `${slug}.md`);
-      if (existsSync(filePath)) {
-        console.error(`Error: Feature file already exists: ${filePath}`);
-        process.exit(1);
+      if (!linearConfigured) {
+        const filePath = join(featuresDir, `${slug}.md`);
+        if (existsSync(filePath)) {
+          console.error(`Error: Feature file already exists: ${filePath}`);
+          process.exit(1);
+        }
       }
 
       console.log(`\nCreating feature: "${featureName}"`);
-      console.log(`File: features/${slug}.md\n`);
+      console.log(`Target: Linear (if configured) or features/${slug}.md\n`);
       console.log("Describe the feature details:");
 
       details = await readMultiLine(rl);
@@ -394,17 +432,17 @@ export async function createFeature(
         process.exit(1);
       }
 
-      const filePath = join(featuresDir, `${slug}.md`);
-      if (existsSync(filePath)) {
-        console.error(`Error: Feature file already exists: ${filePath}`);
-        process.exit(1);
+      if (!linearConfigured) {
+        const filePath = join(featuresDir, `${slug}.md`);
+        if (existsSync(filePath)) {
+          console.error(`Error: Feature file already exists: ${filePath}`);
+          process.exit(1);
+        }
       }
 
       console.log(`\nAuto-generated feature name: "${featureName}"`);
-      console.log(`File: features/${slug}.md\n`);
+      console.log(`Target: Linear (if configured) or features/${slug}.md\n`);
     }
-
-    const filePath = join(featuresDir, `${slug}.md`);
 
     console.log("\nReviewing feature details with AI agent...\n");
 
@@ -426,7 +464,12 @@ export async function createFeature(
       if (!answers.trim()) {
         console.log("No answers provided, proceeding with current details.\n");
         // Build a follow-up that just writes the spec with what we have
-        prompt = buildFollowUpPrompt(featureName, details, review.questions, "(no additional details)");
+        prompt = buildFollowUpPrompt(
+          featureName,
+          details,
+          review.questions,
+          "(no additional details)",
+        );
       } else {
         prompt = buildFollowUpPrompt(featureName, details, review.questions, answers);
       }
@@ -442,6 +485,18 @@ export async function createFeature(
       review = { type: "ready", content: details };
     }
 
+    const linearIssue = await tryCreateLinearIssue(featureName, review.content);
+    if (linearIssue) {
+      console.log(`\nFeature created in Linear: ${linearIssue}\n`);
+      return `linear/${linearIssue}`;
+    }
+
+    const filePath = join(featuresDir, `${slug}.md`);
+    if (existsSync(filePath)) {
+      console.error(`Error: Feature file already exists: ${filePath}`);
+      process.exit(1);
+    }
+
     // Write the feature file
     writeFileSync(filePath, review.content + "\n");
 
@@ -452,4 +507,12 @@ export async function createFeature(
   } finally {
     rl.close();
   }
+}
+
+async function tryCreateLinearIssue(title: string, description: string): Promise<string | null> {
+  const cfg = getLinearConfigFromEnv();
+  if (!cfg) return null;
+
+  const client = new LocalLinearClient(cfg.apiKey);
+  return client.createIssue("KAIBOT", title, description);
 }

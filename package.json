@@ -22,6 +22,7 @@
     "test:real": "tsx src/kai_test_real.ts"
   },
   "dependencies": {
+    "@linear/sdk": "^57.0.0",
     "@anthropic-ai/claude-agent-sdk": "^0.2.72",
     "ink": "^6.8.0",
     "react": "^19.2.4"

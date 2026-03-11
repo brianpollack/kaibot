@@ -1,6 +1,7 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
 
+import { loadProjectEnv } from "./env.js";
 import { KaiBot } from "./KaiBot.js";
 import { createFeature } from "./feature_creator.js";
 import { printModels } from "./models.js";
@@ -20,6 +21,9 @@ if (subcommand === "models") {
 
 if (subcommand === "feature") {
   const nameWords = process.argv.slice(3);
+  const featureProjectDir = resolve(".");
+
+  loadProjectEnv(featureProjectDir);
 
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error("Error: ANTHROPIC_API_KEY environment variable is not set.");
@@ -27,8 +31,6 @@ if (subcommand === "feature") {
     process.exit(1);
   }
 
-  // feature subcommand targets the current working directory
-  const featureProjectDir = resolve(".");
   const featureModel = process.env.KAI_MODEL ?? "claude-opus-4-6";
 
   await createFeature(featureProjectDir, nameWords, featureModel);
@@ -53,6 +55,8 @@ if (!projectDir) {
   console.error("\nEnvironment variables:");
   console.error("  ANTHROPIC_API_KEY  (required)");
   console.error("  KAI_MODEL          (optional, default: claude-opus-4-6)");
+  console.error("  LINEAR_API_KEY     (optional, enables Linear mode)");
+  console.error("  LINEAR_TEAM_KEY    (optional, team key/name for Linear mode)");
   process.exit(1);
 }
 
@@ -62,6 +66,8 @@ if (!existsSync(resolvedDir)) {
   console.error(`Project directory does not exist: ${resolvedDir}`);
   process.exit(1);
 }
+
+loadProjectEnv(resolvedDir);
 
 if (!process.env.ANTHROPIC_API_KEY) {
   console.error("Error: ANTHROPIC_API_KEY environment variable is not set.");

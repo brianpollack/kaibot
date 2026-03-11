@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run bot -- /path/to/project   # Start the feature watcher bot
-npm run feature -- Feature name   # Create a new feature file interactively
+npm run bot -- /path/to/project   # Start the watcher bot (Linear issues if configured, else features/)
+npm run feature -- Feature name   # Create a new feature (Linear issue if configured, else features file)
 npm run models       # List available Claude models
 npm run build        # Compile TypeScript to dist/
 npm run typecheck    # Type-check without emitting
@@ -22,7 +22,7 @@ Run a single test file:
 npx vitest run src/__tests__/feature.test.ts
 ```
 
-Set `ANTHROPIC_API_KEY` (required) and optionally `KAI_MODEL` (default: `claude-opus-4-6`) before running the bot or smoke tests.
+Set `ANTHROPIC_API_KEY` (required) and optionally `KAI_MODEL` (default: `claude-opus-4-6`) before running the bot or smoke tests. For Linear mode, also set `LINEAR_API_KEY` and `LINEAR_TEAM_KEY` (or `LINEAR_TEAM_NAME`). These can be stored in the target project's `.env`.
 
 > **Note:** Whenever a new npm script is added to `package.json`, update both the `## Commands` section above **and** the `## Usage` section in `README.md` with a brief description.
 
