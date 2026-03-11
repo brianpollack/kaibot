@@ -71,6 +71,12 @@ export interface UIState {
   // Commit prompt
   commitPrompt: CommitPromptState;
 
+  // Hotkey input mode (inline feature creation)
+  hotkeyInputActive: boolean;
+  hotkeyInputLines: string[];
+  /** Temporary flash message shown after hotkey actions (e.g. "Feature created: …"). */
+  flashMessage: string;
+
   // Status message (bottom bar)
   statusMessage: string;
 }
@@ -102,6 +108,9 @@ class UIStore extends EventEmitter {
     planLines: [],
     planCostInfo: "",
     commitPrompt: { visible: false, message: "", countdown: 0 },
+    hotkeyInputActive: false,
+    hotkeyInputLines: [],
+    flashMessage: "",
     statusMessage: "",
   };
 
@@ -242,6 +251,40 @@ class UIStore extends EventEmitter {
     this.emitChange();
   }
 
+  // -- Hotkey input --------------------------------------------------------
+
+  /** Enter hotkey input mode (e.g. for inline feature creation). */
+  startHotkeyInput(): void {
+    this.state.hotkeyInputActive = true;
+    this.state.hotkeyInputLines = [];
+    this.emitChange();
+  }
+
+  /** Append a line to the hotkey input buffer. */
+  appendHotkeyInputLine(line: string): void {
+    this.state.hotkeyInputLines = [...this.state.hotkeyInputLines, line];
+    this.emitChange();
+  }
+
+  /** Exit hotkey input mode and clear the input buffer. */
+  finishHotkeyInput(): void {
+    this.state.hotkeyInputActive = false;
+    this.state.hotkeyInputLines = [];
+    this.emitChange();
+  }
+
+  /** Show a temporary flash message. */
+  setFlashMessage(msg: string): void {
+    this.state.flashMessage = msg;
+    this.emitChange();
+  }
+
+  /** Clear the flash message. */
+  clearFlashMessage(): void {
+    this.state.flashMessage = "";
+    this.emitChange();
+  }
+
   // -- Reset for next feature ---------------------------------------------
 
   resetFeature(): void {
@@ -253,6 +296,9 @@ class UIStore extends EventEmitter {
     this.state.planLines = [];
     this.state.planCostInfo = "";
     this.state.commitPrompt = { visible: false, message: "", countdown: 0 };
+    this.state.hotkeyInputActive = false;
+    this.state.hotkeyInputLines = [];
+    this.state.flashMessage = "";
     this.state.statusMessage = "";
     this.emitChange();
   }

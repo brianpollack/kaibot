@@ -175,6 +175,49 @@ export function parseReviewResponse(response: string): ReviewResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Headless feature-file creation (for Ink UI hotkey flow)
+// ---------------------------------------------------------------------------
+
+/**
+ * Writes a feature `.md` file from a raw description string, without any
+ * readline interaction.  Reuses `deriveFeatureName` + `slugify` for naming.
+ *
+ * If a file with the derived slug already exists, a numeric suffix (`_2`, `_3`,
+ * …) is appended to avoid collisions.
+ *
+ * @returns The relative path `features/{slug}.md` of the created file, or
+ *          `null` if the description was empty.
+ */
+export function writeFeatureFromDescription(
+  projectDir: string,
+  description: string,
+): string | null {
+  const text = description.trim();
+  if (!text) return null;
+
+  const featuresDir = join(projectDir, "features");
+  mkdirSync(featuresDir, { recursive: true });
+
+  const name = deriveFeatureName(text);
+  const slug = slugify(name);
+  if (!slug) return null;
+
+  // Deduplicate: if slug.md exists, try slug_2.md, slug_3.md, …
+  let filePath = join(featuresDir, `${slug}.md`);
+  let suffix = 1;
+  while (existsSync(filePath)) {
+    suffix++;
+    filePath = join(featuresDir, `${slug}_${suffix}.md`);
+  }
+
+  writeFileSync(filePath, text + "\n");
+
+  // Return a short display path
+  const finalSlug = suffix > 1 ? `${slug}_${suffix}` : slug;
+  return `features/${finalSlug}.md`;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 

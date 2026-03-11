@@ -2,12 +2,14 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
 
 import {
+  type BotStatus,
   type CommitPromptState,
   type FeatureStage,
   type PlanLine,
   type UIState,
   uiStore,
 } from "./store.js";
+import { writeFeatureFromDescription } from "../feature_creator.js";
 
 // ---------------------------------------------------------------------------
 // Hook: subscribe to UIStore changes
@@ -410,6 +412,154 @@ function PlanPanel({
 }
 
 // ---------------------------------------------------------------------------
+// Hotkey Bar — visible only in "watching" state
+// ---------------------------------------------------------------------------
+
+function HotkeyBar({
+  status,
+  flashMessage,
+  cols,
+}: {
+  status: BotStatus;
+  flashMessage: string;
+  cols: number;
+}): React.JSX.Element | null {
+  if (status !== "watching") return null;
+
+  const dividerWidth = Math.max(cols, 40);
+
+  return (
+    <Box flexDirection="column">
+      <Text dimColor>{"─".repeat(dividerWidth)}</Text>
+      <Box>
+        {flashMessage ? (
+          <Text color="greenBright" bold>
+            {flashMessage}
+          </Text>
+        ) : (
+          <Box>
+            <Text color="cyan" bold>
+              {"[F]"}
+            </Text>
+            <Text dimColor>{" New Feature"}</Text>
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Feature Input — multi-line text capture with 3-blank-line termination
+// ---------------------------------------------------------------------------
+
+function FeatureInput({
+  lines,
+  cols,
+}: {
+  lines: string[];
+  cols: number;
+}): React.JSX.Element {
+  const [currentLine, setCurrentLine] = useState("");
+
+  const blankCount = useRef(0);
+
+  const handleInput = useCallback(
+    (input: string, key: { return?: boolean; backspace?: boolean; delete?: boolean; escape?: boolean }) => {
+      if (key.escape) {
+        // Cancel input
+        uiStore.finishHotkeyInput();
+        uiStore.setFlashMessage("Cancelled");
+        setTimeout(() => uiStore.clearFlashMessage(), 2000);
+        return;
+      }
+
+      if (key.return) {
+        const trimmed = currentLine.trim();
+        uiStore.appendHotkeyInputLine(currentLine);
+
+        if (trimmed === "") {
+          blankCount.current += 1;
+        } else {
+          blankCount.current = 0;
+        }
+
+        setCurrentLine("");
+
+        if (blankCount.current >= 3) {
+          // Finalize input — trim trailing blank lines
+          const allLines = [...lines, currentLine];
+          while (allLines.length > 0 && allLines[allLines.length - 1].trim() === "") {
+            allLines.pop();
+          }
+          const description = allLines.join("\n");
+
+          uiStore.finishHotkeyInput();
+
+          if (!description.trim()) {
+            uiStore.setFlashMessage("Cancelled");
+            setTimeout(() => uiStore.clearFlashMessage(), 2000);
+            return;
+          }
+
+          const projectDir = uiStore.getState().projectDir;
+          const result = writeFeatureFromDescription(projectDir, description);
+
+          if (result) {
+            uiStore.setFlashMessage(`Feature created: ${result}`);
+          } else {
+            uiStore.setFlashMessage("Cancelled — could not derive feature name");
+          }
+          setTimeout(() => uiStore.clearFlashMessage(), 3000);
+        }
+        return;
+      }
+
+      if (key.backspace || key.delete) {
+        setCurrentLine((l) => l.slice(0, -1));
+        return;
+      }
+
+      if (input) {
+        setCurrentLine((l) => l + input);
+      }
+    },
+    [currentLine, lines],
+  );
+
+  useInput(handleInput, { isActive: true });
+
+  const dividerWidth = Math.max(cols, 40);
+  const maxVisible = 10;
+  const visibleLines = lines.slice(-maxVisible);
+
+  return (
+    <Box flexDirection="column" paddingX={1}>
+      <Text bold color="cyan">
+        {"Enter feature description (3 blank lines to finish, Esc to cancel):"}
+      </Text>
+      <Text dimColor>{"─".repeat(dividerWidth)}</Text>
+      {visibleLines.map((line, i) => (
+        <Text key={i} color="white">
+          {"  " + (line || " ")}
+        </Text>
+      ))}
+      <Box>
+        <Text color="greenBright">{"> "}</Text>
+        <Text color="white">{currentLine}</Text>
+        <Text color="cyan">{"_"}</Text>
+      </Box>
+      <Box height={1} />
+      <Text dimColor>
+        {blankCount.current > 0
+          ? `  (${blankCount.current}/3 blank lines entered)`
+          : "  Type your feature description…"}
+      </Text>
+    </Box>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main App
 // ---------------------------------------------------------------------------
 
@@ -433,9 +583,49 @@ export function App(): React.JSX.Element {
     };
   }, [stdout]);
 
+  // Hotkey handler — only active when watching, not in input mode, and no
+  // commit prompt is showing.
+  const hotkeyActive =
+    state.status === "watching" &&
+    !state.hotkeyInputActive &&
+    !state.commitPrompt.visible;
+
+  const handleHotkey = useCallback(
+    (input: string, key: { shift?: boolean; ctrl?: boolean; meta?: boolean }) => {
+      // Ignore if any modifier key is pressed
+      if (key.ctrl || key.meta) return;
+
+      if (input.toLowerCase() === "f") {
+        uiStore.clearFlashMessage();
+        uiStore.startHotkeyInput();
+      }
+    },
+    [],
+  );
+
+  useInput(handleHotkey, { isActive: hotkeyActive });
+
   // Split columns: left 60%, right 40%
   const leftCols = Math.floor(cols * 0.6);
   const rightCols = cols - leftCols;
+
+  // When hotkey input is active, show the feature input overlay instead of
+  // the normal dashboard panels.
+  if (state.hotkeyInputActive) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Header
+          status={state.status}
+          projectDir={state.projectDir}
+          model={state.model}
+          featureName={state.featureName}
+          featureStage={state.featureStage}
+          cols={cols}
+        />
+        <FeatureInput lines={state.hotkeyInputLines} cols={cols} />
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column" paddingX={1}>
@@ -470,6 +660,11 @@ export function App(): React.JSX.Element {
           />
         </Box>
       </Box>
+      <HotkeyBar
+        status={state.status}
+        flashMessage={state.flashMessage}
+        cols={cols}
+      />
       <StatusBar statusMessage={state.statusMessage} cols={cols} />
     </Box>
   );

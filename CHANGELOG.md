@@ -22,3 +22,6 @@ Implemented the `npm run feature` CLI command for interactive feature file creat
 March 10th, 2026: main: brian
 Implemented auto-generation of feature names from descriptions when `npm run feature` is invoked without a name argument. Changes:
 
+March 10th, 2026: main: brian
+Implemented a hotkey menu system for KaiBot's watching state:
+
