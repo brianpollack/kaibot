@@ -215,7 +215,7 @@ function CommandPanel({
 
 function FileOpsPanel({
   fileOps,
-  cols,
+  cols: _cols,
 }: {
   fileOps: UIState["fileOps"];
   cols: number;
@@ -227,8 +227,8 @@ function FileOpsPanel({
     t === "read" ? "READ " : t === "write" ? "WRITE" : "EDIT ";
 
   // On wider terminals, show longer file paths and previews
-  const pathWidth = cols >= 120 ? 70 : cols >= 100 ? 60 : 50;
-  const previewWidth = cols >= 120 ? 40 : cols >= 100 ? 30 : 20;
+  const pathWidth = 120;
+  const previewWidth = 80;
 
   return (
     <Box flexDirection="column">
@@ -386,10 +386,7 @@ function PlanPanel({
             <Text color={line.checked ? "green" : "white"}>
               {"  " + (line.checked ? "✅" : "⬜") + " "}
             </Text>
-            <Text
-              color={line.checked ? "green" : "white"}
-              dimColor={line.checked}
-            >
+            <Text color={line.checked ? "green" : "white"} dimColor={line.checked}>
               {truncate(line.text, lineWidth)}
             </Text>
           </Box>
@@ -450,7 +447,11 @@ function HotkeyBar({
             <Text color="cyan" bold>
               {"[F]"}
             </Text>
-            <Text dimColor>{" New Feature"}</Text>
+            <Text dimColor>{" New Feature  "}</Text>
+            <Text color="cyan" bold>
+              {"[Q]"}
+            </Text>
+            <Text dimColor>{" Quit"}</Text>
           </Box>
         )}
       </Box>
@@ -462,19 +463,16 @@ function HotkeyBar({
 // Feature Input — multi-line text capture with 3-blank-line termination
 // ---------------------------------------------------------------------------
 
-function FeatureInput({
-  lines,
-  cols,
-}: {
-  lines: string[];
-  cols: number;
-}): React.JSX.Element {
+function FeatureInput({ lines, cols }: { lines: string[]; cols: number }): React.JSX.Element {
   const [currentLine, setCurrentLine] = useState("");
 
   const blankCount = useRef(0);
 
   const handleInput = useCallback(
-    (input: string, key: { return?: boolean; backspace?: boolean; delete?: boolean; escape?: boolean }) => {
+    (
+      input: string,
+      key: { return?: boolean; backspace?: boolean; delete?: boolean; escape?: boolean },
+    ) => {
       if (key.escape) {
         // Cancel input
         uiStore.finishHotkeyInput();
@@ -621,6 +619,10 @@ export function App(): React.JSX.Element {
       if (input.toLowerCase() === "f") {
         uiStore.clearFlashMessage();
         uiStore.startHotkeyInput();
+      }
+
+      if (input.toLowerCase() === "q") {
+        uiStore.requestQuit();
       }
     },
     [],

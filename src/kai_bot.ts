@@ -5,6 +5,7 @@ import { KaiBot } from "./KaiBot.js";
 import { createFeature } from "./feature_creator.js";
 import { printModels } from "./models.js";
 import { mountUI, unmountUI } from "./ui/render.js";
+import { uiStore } from "./ui/store.js";
 
 // ---------------------------------------------------------------------------
 // Subcommands
@@ -86,6 +87,12 @@ process.on("SIGINT", () => {
 });
 
 process.on("SIGTERM", () => {
+  unmountUI();
+  bot.stop();
+  process.exit(0);
+});
+
+uiStore.on("quit", () => {
   unmountUI();
   bot.stop();
   process.exit(0);

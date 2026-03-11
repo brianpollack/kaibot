@@ -294,6 +294,11 @@ class UIStore extends EventEmitter {
     this.emitChange();
   }
 
+  /** Emit a quit request so the CLI entry point can perform graceful shutdown. */
+  requestQuit(): void {
+    this.emit("quit");
+  }
+
   // -- Reset for next feature ---------------------------------------------
 
   resetFeature(): void {
