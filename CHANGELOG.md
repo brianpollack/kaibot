@@ -34,3 +34,6 @@ Implemented agent review for the F-hotkey feature creation flow. When the user p
 March 10th, 2026: main: brian
 Added a **Q** keyboard shortcut to gracefully quit KaiBot while in the "watching" state. The implementation follows the same pattern as the existing **F** hotkey:
 
+March 10th, 2026: main: brian
+Subtracted 4 from the raw terminal column width at all four reading sites — two in `src/ui/App.tsx` (initial `useState` and resize handler) and two in `src/ui/store.ts` (initial state and `updateTerminalSize`). This provides a safe 4-column margin so the Ink UI no longer overflows or wraps at standard terminal widths. The effective fallback is now 76 columns (80 − 4). TypeScript typecheck passes with no errors.
+

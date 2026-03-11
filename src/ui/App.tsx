@@ -588,12 +588,12 @@ export function App(): React.JSX.Element {
   const { stdout } = useStdout();
 
   // Track terminal resize
-  const [cols, setCols] = useState(stdout.columns ?? 80);
+  const [cols, setCols] = useState((stdout.columns ?? 80) - 4);
   const [rows, setRows] = useState(stdout.rows ?? 24);
 
   useEffect(() => {
     const onResize = () => {
-      setCols(stdout.columns ?? 80);
+      setCols((stdout.columns ?? 80) - 4);
       setRows(stdout.rows ?? 24);
       uiStore.updateTerminalSize();
     };

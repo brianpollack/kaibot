@@ -102,7 +102,7 @@ class UIStore extends EventEmitter {
     model: "",
     featureName: null,
     featureStage: null,
-    terminalColumns: process.stdout.columns ?? 80,
+    terminalColumns: (process.stdout.columns ?? 80) - 4,
     terminalRows: process.stdout.rows ?? 24,
     thinkingLines: [],
     commands: [],
@@ -149,7 +149,7 @@ class UIStore extends EventEmitter {
   }
 
   updateTerminalSize(): void {
-    this.state.terminalColumns = process.stdout.columns ?? 80;
+    this.state.terminalColumns = (process.stdout.columns ?? 80) - 4;
     this.state.terminalRows = process.stdout.rows ?? 24;
     this.emitChange();
   }
