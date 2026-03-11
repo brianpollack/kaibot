@@ -37,3 +37,6 @@ Added a **Q** keyboard shortcut to gracefully quit KaiBot while in the "watching
 March 10th, 2026: main: brian
 Subtracted 4 from the raw terminal column width at all four reading sites — two in `src/ui/App.tsx` (initial `useState` and resize handler) and two in `src/ui/store.ts` (initial state and `updateTerminalSize`). This provides a safe 4-column margin so the Ink UI no longer overflows or wraps at standard terminal widths. The effective fallback is now 76 columns (80 − 4). TypeScript typecheck passes with no errors.
 
+March 11th, 2026: main: brian
+Implemented automatic inclusion of the target project's `CLAUDE.md` file in the agent system prompt. When KaiBot processes a feature, `KaiClient` now reads `{projectDir}/CLAUDE.md` (if it exists) and appends its content to the base system prompt with an "OVERRIDE" instruction header. This gives the agent project-specific context about conventions, patterns, and build instructions.
+

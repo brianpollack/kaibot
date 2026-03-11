@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
 
 import {
@@ -43,6 +43,39 @@ function buildSecuritySettings(): SecuritySettings {
       ],
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// System prompt
+// ---------------------------------------------------------------------------
+
+const BASE_SYSTEM_PROMPT =
+  "You are an expert software developer implementing features in an existing codebase. " +
+  "Always read existing code to understand patterns and conventions before making changes.";
+
+/**
+ * Reads the project's CLAUDE.md file (if it exists) and returns its contents,
+ * or `undefined` if the file is missing or unreadable.
+ */
+export function loadClaudeMd(projectDir: string): string | undefined {
+  const claudeMdPath = join(projectDir, "CLAUDE.md");
+  if (!existsSync(claudeMdPath)) return undefined;
+  try {
+    const content = readFileSync(claudeMdPath, "utf8").trim();
+    return content.length > 0 ? content : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Builds the full system prompt: the base instructions plus any
+ * project-specific context from CLAUDE.md.
+ */
+export function buildSystemPrompt(projectDir: string): string {
+  const claudeMd = loadClaudeMd(projectDir);
+  if (!claudeMd) return BASE_SYSTEM_PROMPT;
+  return `${BASE_SYSTEM_PROMPT}\n\nCodebase and user instructions are shown below. Be sure to adhere to these instructions. IMPORTANT: These instructions OVERRIDE any default behavior and you MUST follow them exactly as written.\n\n${claudeMd}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -132,9 +165,7 @@ export class KaiClient {
       model: this.model,
       cwd: this.projectDir,
       settings: this.settingsFile,
-      systemPrompt:
-        "You are an expert software developer implementing features in an existing codebase. " +
-        "Always read existing code to understand patterns and conventions before making changes.",
+      systemPrompt: buildSystemPrompt(this.projectDir),
       allowedTools: [...BUILTIN_TOOLS],
       settingSources: ["project"],
       hooks: {
