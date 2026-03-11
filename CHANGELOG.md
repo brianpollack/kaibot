@@ -28,3 +28,6 @@ Implemented a hotkey menu system for KaiBot's watching state:
 March 10th, 2026: main: brian
 Added testing guidelines to the KaiBot agent system so that UI-related features (CLI apps, React components, styling, layout) and features that don't change logic will not have tests added automatically. The guidelines were added in two places:
 
+March 10th, 2026: main: brian
+Implemented agent review for the F-hotkey feature creation flow. When the user presses F and submits a description, it now goes through the same `buildReviewPrompt` → `KaiClient.run()` pipeline used by `npm run feature`, producing a well-structured specification instead of writing the raw description.
+

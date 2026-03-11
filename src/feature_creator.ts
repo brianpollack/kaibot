@@ -76,7 +76,7 @@ async function readMultiLine(rl: ReturnType<typeof createInterface>): Promise<st
 // Agent review prompt
 // ---------------------------------------------------------------------------
 
-function buildReviewPrompt(featureName: string, details: string): string {
+export function buildReviewPrompt(featureName: string, details: string): string {
   return `You are helping a developer write a feature specification.
 
 The developer wants to create a feature called "${featureName}" with the following details:
@@ -216,6 +216,103 @@ export function writeFeatureFromDescription(
   // Return a short display path
   const finalSlug = suffix > 1 ? `${slug}_${suffix}` : slug;
   return `features/${finalSlug}.md`;
+}
+
+// ---------------------------------------------------------------------------
+// Headless agent-reviewed feature creation (for Ink UI hotkey flow)
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a follow-up prompt that forces the agent to produce a READY response
+ * instead of asking for clarification — used when interactive clarification
+ * is not available (e.g. the hotkey UI).
+ */
+function buildNoClarifyRetryPrompt(featureName: string, details: string, questions: string): string {
+  return `You are helping a developer write a feature specification.
+
+Feature: "${featureName}"
+
+Original details:
+---
+${details}
+---
+
+You previously asked for clarification:
+---
+${questions}
+---
+
+The developer is unable to answer right now. Please do your best with the information provided and write the final feature specification. Respond with EXACTLY this format:
+
+READY
+<the full, well-structured feature specification>
+
+Include clear instructions, acceptance criteria, and any technical notes.
+Do NOT include markdown headings like ## Plan or ## Summary.`;
+}
+
+/**
+ * Sends a feature description through the agent review pipeline, then writes
+ * the refined specification to a feature file. This is the headless equivalent
+ * of `createFeature()` — no readline interaction, no clarification rounds.
+ *
+ * If the agent returns CLARIFY, it retries once asking the agent to proceed
+ * without answers. On any error, falls back to writing the raw description.
+ *
+ * @returns The relative path `features/{slug}.md` of the created file, or
+ *          `null` if the description was empty.
+ */
+export async function reviewAndWriteFeature(
+  projectDir: string,
+  model: string,
+  description: string,
+): Promise<{ path: string | null; reviewed: boolean }> {
+  const text = description.trim();
+  if (!text) return { path: null, reviewed: false };
+
+  const featuresDir = join(projectDir, "features");
+  mkdirSync(featuresDir, { recursive: true });
+
+  const name = deriveFeatureName(text);
+  const slug = slugify(name);
+  if (!slug) return { path: null, reviewed: false };
+
+  // Deduplicate: if slug.md exists, try slug_2.md, slug_3.md, …
+  let filePath = join(featuresDir, `${slug}.md`);
+  let suffix = 1;
+  while (existsSync(filePath)) {
+    suffix++;
+    filePath = join(featuresDir, `${slug}_${suffix}.md`);
+  }
+  const finalSlug = suffix > 1 ? `${slug}_${suffix}` : slug;
+  const displayPath = `features/${finalSlug}.md`;
+
+  // Attempt agent review
+  let reviewed = false;
+  let content = text;
+  try {
+    const client = KaiClient.create(projectDir, model);
+    const prompt = buildReviewPrompt(name, text);
+    const response = await client.run(prompt);
+    let review = parseReviewResponse(response);
+
+    // If the agent asks for clarification, retry once without answers
+    if (review.type === "clarify") {
+      const retryPrompt = buildNoClarifyRetryPrompt(name, text, review.questions);
+      const retryResponse = await client.run(retryPrompt);
+      review = parseReviewResponse(retryResponse);
+    }
+
+    if (review.type === "ready") {
+      content = review.content;
+      reviewed = true;
+    }
+  } catch {
+    // Fall back to raw description on any error
+  }
+
+  writeFileSync(filePath, content + "\n");
+  return { path: displayPath, reviewed };
 }
 
 // ---------------------------------------------------------------------------

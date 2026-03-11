@@ -74,6 +74,8 @@ export interface UIState {
   // Hotkey input mode (inline feature creation)
   hotkeyInputActive: boolean;
   hotkeyInputLines: string[];
+  /** Whether the agent is currently reviewing a feature description from the hotkey input. */
+  featureReviewActive: boolean;
   /** Temporary flash message shown after hotkey actions (e.g. "Feature created: …"). */
   flashMessage: string;
 
@@ -110,6 +112,7 @@ class UIStore extends EventEmitter {
     commitPrompt: { visible: false, message: "", countdown: 0 },
     hotkeyInputActive: false,
     hotkeyInputLines: [],
+    featureReviewActive: false,
     flashMessage: "",
     statusMessage: "",
   };
@@ -273,6 +276,12 @@ class UIStore extends EventEmitter {
     this.emitChange();
   }
 
+  /** Mark that an agent review is in progress (or complete). */
+  setFeatureReviewActive(active: boolean): void {
+    this.state.featureReviewActive = active;
+    this.emitChange();
+  }
+
   /** Show a temporary flash message. */
   setFlashMessage(msg: string): void {
     this.state.flashMessage = msg;
@@ -298,6 +307,7 @@ class UIStore extends EventEmitter {
     this.state.commitPrompt = { visible: false, message: "", countdown: 0 };
     this.state.hotkeyInputActive = false;
     this.state.hotkeyInputLines = [];
+    this.state.featureReviewActive = false;
     this.state.flashMessage = "";
     this.state.statusMessage = "";
     this.emitChange();

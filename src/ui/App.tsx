@@ -9,7 +9,7 @@ import {
   type UIState,
   uiStore,
 } from "./store.js";
-import { writeFeatureFromDescription } from "../feature_creator.js";
+import { reviewAndWriteFeature } from "../feature_creator.js";
 
 // ---------------------------------------------------------------------------
 // Hook: subscribe to UIStore changes
@@ -418,10 +418,12 @@ function PlanPanel({
 function HotkeyBar({
   status,
   flashMessage,
+  featureReviewActive,
   cols,
 }: {
   status: BotStatus;
   flashMessage: string;
+  featureReviewActive: boolean;
   cols: number;
 }): React.JSX.Element | null {
   if (status !== "watching") return null;
@@ -432,7 +434,14 @@ function HotkeyBar({
     <Box flexDirection="column">
       <Text dimColor>{"─".repeat(dividerWidth)}</Text>
       <Box>
-        {flashMessage ? (
+        {featureReviewActive ? (
+          <Box>
+            <Spinner color="cyan" />
+            <Text color="cyan" bold>
+              {" " + (flashMessage || "Reviewing feature with AI agent…")}
+            </Text>
+          </Box>
+        ) : flashMessage ? (
           <Text color="greenBright" bold>
             {flashMessage}
           </Text>
@@ -502,15 +511,28 @@ function FeatureInput({
             return;
           }
 
-          const projectDir = uiStore.getState().projectDir;
-          const result = writeFeatureFromDescription(projectDir, description);
+          const { projectDir, model } = uiStore.getState();
 
-          if (result) {
-            uiStore.setFlashMessage(`Feature created: ${result}`);
-          } else {
-            uiStore.setFlashMessage("Cancelled — could not derive feature name");
-          }
-          setTimeout(() => uiStore.clearFlashMessage(), 3000);
+          // Run agent review asynchronously
+          uiStore.setFeatureReviewActive(true);
+          uiStore.setFlashMessage("Reviewing feature with AI agent…");
+
+          reviewAndWriteFeature(projectDir, model, description)
+            .then(({ path, reviewed }) => {
+              uiStore.setFeatureReviewActive(false);
+              if (path) {
+                const note = reviewed ? "" : " (raw — agent review failed)";
+                uiStore.setFlashMessage(`Feature created: ${path}${note}`);
+              } else {
+                uiStore.setFlashMessage("Cancelled — could not derive feature name");
+              }
+              setTimeout(() => uiStore.clearFlashMessage(), 4000);
+            })
+            .catch(() => {
+              uiStore.setFeatureReviewActive(false);
+              uiStore.setFlashMessage("Error creating feature");
+              setTimeout(() => uiStore.clearFlashMessage(), 4000);
+            });
         }
         return;
       }
@@ -588,6 +610,7 @@ export function App(): React.JSX.Element {
   const hotkeyActive =
     state.status === "watching" &&
     !state.hotkeyInputActive &&
+    !state.featureReviewActive &&
     !state.commitPrompt.visible;
 
   const handleHotkey = useCallback(
@@ -663,6 +686,7 @@ export function App(): React.JSX.Element {
       <HotkeyBar
         status={state.status}
         flashMessage={state.flashMessage}
+        featureReviewActive={state.featureReviewActive}
         cols={cols}
       />
       <StatusBar statusMessage={state.statusMessage} cols={cols} />
