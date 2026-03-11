@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
 import { appendChangelog } from "./changelog.js";
+import { promptAndCommit } from "./commit.js";
 import { isNewFeatureFile, markComplete, markInProgress, parseFeature } from "./feature.js";
 import { processFeature } from "./KaiAgent.js";
 import { uiStore } from "./ui/store.js";
@@ -131,6 +132,10 @@ export class KaiBot {
 
       feature = markComplete(feature);
       appendChangelog(feature, this.projectDir);
+
+      // Offer to auto-commit; defaults to Yes after 5s timeout
+      await promptAndCommit(feature, this.projectDir);
+
       uiStore.setStatusMessage(`Complete: ${feature.name}`);
       uiStore.resetFeature();
       uiStore.setStatus("watching");

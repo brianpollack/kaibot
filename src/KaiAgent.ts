@@ -1,11 +1,11 @@
-import { appendFileSync } from "fs";
+import { appendFileSync, readFileSync } from "fs";
 import { basename } from "path";
 
 import type { SDKAssistantMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 
 import { type Feature } from "./feature.js";
 import { KaiClient } from "./KaiClient.js";
-import { uiStore } from "./ui/store.js";
+import { type PlanLine, uiStore } from "./ui/store.js";
 
 // ---------------------------------------------------------------------------
 // Prompt
@@ -98,6 +98,9 @@ export async function processFeature(
       }
     }
 
+    // After each message, refresh plan lines from the feature file
+    refreshPlanLines(feature.filePath);
+
     // Handle completion
     if (msg.type === "result") {
       const result = msg as SDKResultMessage;
@@ -112,9 +115,9 @@ export async function processFeature(
       uiStore.setFeatureStage("complete");
       const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
       const costStr = `$${result.total_cost_usd.toFixed(4)}`;
-      uiStore.setStatusMessage(
-        `Done — cost: ${costStr}, turns: ${result.num_turns}, time: ${elapsedSec}s`,
-      );
+      const costInfo = `Cost: ${costStr}  Turns: ${result.num_turns}  Time: ${elapsedSec}s`;
+      uiStore.setStatusMessage(`Done — ${costInfo}`);
+      uiStore.setPlanCostInfo(costInfo);
       appendFileSync(
         feature.filePath,
         `\n## Metadata\n\n- **Model:** ${model}\n- **Cost:** ${costStr}\n- **Turns:** ${result.num_turns}\n- **Time:** ${elapsedSec}s\n`,
@@ -160,4 +163,56 @@ function getFileOpPreview(toolName: string, input: Record<string, unknown> | und
       : "";
   }
   return "";
+}
+
+// ---------------------------------------------------------------------------
+// Plan parsing — reads the feature file and extracts checkbox lines
+// ---------------------------------------------------------------------------
+
+const CHECKBOX_RE = /^- \[([ xX])\] (.+)$/;
+
+/** Parse plan checkbox lines from file content. */
+export function parsePlanLines(content: string): PlanLine[] {
+  const lines: PlanLine[] = [];
+  let inPlan = false;
+
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+
+    // Detect start of plan section
+    if (trimmed === "## Plan") {
+      inPlan = true;
+      continue;
+    }
+
+    // Stop at the next heading (## Summary, ## Metadata, etc.)
+    if (inPlan && /^## /.test(trimmed)) {
+      break;
+    }
+
+    if (inPlan) {
+      const match = CHECKBOX_RE.exec(trimmed);
+      if (match) {
+        lines.push({
+          checked: match[1] !== " ",
+          text: match[2],
+        });
+      }
+    }
+  }
+
+  return lines;
+}
+
+/** Read the feature file and update the plan panel in the UI store. */
+function refreshPlanLines(filePath: string): void {
+  try {
+    const content = readFileSync(filePath, "utf8");
+    const lines = parsePlanLines(content);
+    if (lines.length > 0) {
+      uiStore.setPlanLines(lines);
+    }
+  } catch {
+    // File may not exist yet or may be mid-rename; ignore
+  }
 }
