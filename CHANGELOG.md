@@ -52,3 +52,6 @@ Updated `buildCommitMessage` in `src/commit.ts` to return the feature descriptio
 March 11th, 2026: main: brian
 This feature was already fully implemented in prior commits. The `buildCommitMessage()` function in `src/commit.ts` uses `extractFeatureDescription()` to extract the original feature description (all non-empty content lines before any `## Plan`, `## Summary`, or `## Metadata` section) and uses that as the git commit message. The feature name is used as a fallback if the file is unreadable or has no description content. All 12 existing tests pass and confirm this behavior.
 
+March 11th, 2026: main: brian
+Implemented the Tech Debt scan feature activated by pressing **S** in the watching state.
+

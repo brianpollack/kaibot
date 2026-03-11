@@ -1,3 +1,4 @@
+import { execSync } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -6,7 +7,10 @@ import { promptAndCommit } from "./commit.js";
 import { isNewFeatureFile, markComplete, markInProgress, parseFeature } from "./feature.js";
 import { processFeature } from "./KaiAgent.js";
 import {
+  buildLinearPlanComment,
   buildLinearCompletionComment,
+  cleanupMaterializedLinearWorkfile,
+  cleanupStaleLinearWorkfiles,
   getLinearConfigFromEnv,
   LocalLinearClient,
   type LinearIssue,
@@ -103,9 +107,12 @@ export class KaiBot {
 
   private async initLinearMode(): Promise<void> {
     if (!this.linearClient || !this.linearTeamRef) return;
-
-    this.linearTeamId = "KAIBOT";
-    this.linearTeamLabel = `KaiBot Team`;
+    const setup = await this.linearClient.resolveTeamSetup(this.linearTeamRef);
+    this.linearTeamId = setup.teamId;
+    this.linearTeamLabel = setup.teamLabel;
+    this.linearStartedStateId = setup.startedStateId;
+    this.linearCompletedStateId = setup.completedStateId;
+    cleanupStaleLinearWorkfiles(this.projectDir);
   }
 
   private getWatchingMessage(): string {
@@ -138,6 +145,8 @@ export class KaiBot {
     const issueId = issue.id;
     const issueIdentifier = issue.identifier;
     let feature = materializeLinearIssue(this.projectDir, issue);
+    let shouldCleanupWorkfile = false;
+    const preExistingChanges = getGitStatusPaths(this.projectDir);
 
     try {
       uiStore.setStatus("processing");
@@ -148,18 +157,27 @@ export class KaiBot {
         await this.linearClient.updateIssueState(issueId, this.linearStartedStateId);
       }
 
-      await processFeature(feature, this.projectDir, this.model);
+      await processFeature(feature, this.projectDir, this.model, {
+        onPlanCreated: async (planSection: string) => {
+          if (!this.linearClient) return;
+          const comment = buildLinearPlanComment(issueIdentifier, planSection);
+          await this.linearClient.addComment(issueId, comment);
+        },
+      });
 
       feature = markComplete(feature);
       appendChangelog(feature, this.projectDir);
+      const changedFiles = getNewlyChangedFiles(this.projectDir, preExistingChanges);
       await promptAndCommit(feature, this.projectDir);
 
       if (this.linearCompletedStateId) {
         await this.linearClient.updateIssueState(issueId, this.linearCompletedStateId);
+        shouldCleanupWorkfile = true;
       }
 
-      const comment = buildLinearCompletionComment(feature, issueIdentifier);
+      const comment = buildLinearCompletionComment(feature, issueIdentifier, changedFiles);
       await this.linearClient.addComment(issueId, comment);
+      shouldCleanupWorkfile = true;
 
       uiStore.setStatusMessage(`Complete: ${issueIdentifier}`);
       uiStore.resetFeature();
@@ -181,6 +199,10 @@ export class KaiBot {
       );
       uiStore.setStatus("watching");
       uiStore.setStatusMessage(this.getWatchingMessage());
+    } finally {
+      if (shouldCleanupWorkfile) {
+        cleanupMaterializedLinearWorkfile(this.projectDir, feature.filePath);
+      }
     }
   }
 
@@ -295,4 +317,44 @@ function isAuthError(err: unknown): boolean {
     if (status === 401 || status === 403) return true;
   }
   return false;
+}
+
+function getGitStatusPaths(projectDir: string): Set<string> {
+  try {
+    execSync("git rev-parse --is-inside-work-tree", { cwd: projectDir, stdio: "pipe" });
+    const status = execSync("git status --porcelain", {
+      cwd: projectDir,
+      encoding: "utf8",
+      stdio: "pipe",
+    }).trim();
+
+    if (!status) return new Set();
+
+    const paths = status
+      .split("\n")
+      .map((line) => parsePorcelainPath(line))
+      .filter((path): path is string => Boolean(path));
+    return new Set(paths);
+  } catch {
+    return new Set();
+  }
+}
+
+function parsePorcelainPath(line: string): string | null {
+  const raw = line.slice(3).trim();
+  if (!raw) return null;
+  if (raw.includes(" -> ")) {
+    const [, renamedTo] = raw.split(" -> ");
+    return renamedTo?.trim() ?? null;
+  }
+  return raw;
+}
+
+function getNewlyChangedFiles(projectDir: string, baseline: Set<string>): string[] {
+  const current = getGitStatusPaths(projectDir);
+  const files = [...current]
+    .filter((path) => !baseline.has(path))
+    .filter((path) => !path.startsWith(".kaibot/linear/"))
+    .sort((a, b) => a.localeCompare(b));
+  return files;
 }

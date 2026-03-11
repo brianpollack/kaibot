@@ -7,6 +7,10 @@ import { type Feature } from "./feature.js";
 import { KaiClient } from "./KaiClient.js";
 import { type PlanLine, uiStore } from "./ui/store.js";
 
+export interface ProcessFeatureOptions {
+  onPlanCreated?: (planSection: string) => Promise<void> | void;
+}
+
 // ---------------------------------------------------------------------------
 // Prompt
 // ---------------------------------------------------------------------------
@@ -59,6 +63,7 @@ export async function processFeature(
   feature: Feature,
   projectDir: string,
   model: string,
+  options: ProcessFeatureOptions = {},
 ): Promise<void> {
   const client = KaiClient.create(projectDir, model);
   const prompt = buildPrompt(feature, projectDir);
@@ -70,6 +75,7 @@ export async function processFeature(
 
   let hasSeenToolUse = false;
   let hasSeenEdit = false;
+  let hasNotifiedPlan = false;
 
   for await (const msg of client.query(prompt)) {
     // Stream assistant text and log tool calls
@@ -106,6 +112,18 @@ export async function processFeature(
 
     // After each message, refresh plan lines from the feature file
     refreshPlanLines(feature.filePath);
+    if (!hasNotifiedPlan && options.onPlanCreated) {
+      const planSection = readPlanSection(feature.filePath);
+      if (planSection) {
+        hasNotifiedPlan = true;
+        try {
+          await options.onPlanCreated(planSection);
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.warn(`[KaiAgent] Failed to send plan callback: ${errMsg}`);
+        }
+      }
+    }
 
     // Handle completion
     if (msg.type === "result") {
@@ -220,5 +238,28 @@ function refreshPlanLines(filePath: string): void {
     }
   } catch {
     // File may not exist yet or may be mid-rename; ignore
+  }
+}
+
+function readPlanSection(filePath: string): string | null {
+  try {
+    const content = readFileSync(filePath, "utf8");
+    const lines = content.split("\n");
+    const startIdx = lines.findIndex((line) => line.trim() === "## Plan");
+    if (startIdx === -1) return null;
+
+    const section: string[] = [];
+    for (let i = startIdx + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.trim().startsWith("## ")) break;
+      section.push(line);
+    }
+
+    const trimmed = section.join("\n").trim();
+    if (trimmed.length === 0) return null;
+    if (!/- \[[ xX]\]\s+/.test(trimmed)) return null;
+    return trimmed;
+  } catch {
+    return null;
   }
 }

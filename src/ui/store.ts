@@ -83,6 +83,10 @@ export interface UIState {
   /** Whether the model selector overlay is currently open. */
   isSelectingModel: boolean;
 
+  // Tech debt scan
+  /** Whether a tech debt scan is currently running. */
+  isScanningTechDebt: boolean;
+
   // Status message (bottom bar)
   statusMessage: string;
 }
@@ -119,6 +123,7 @@ class UIStore extends EventEmitter {
     featureReviewActive: false,
     flashMessage: "",
     isSelectingModel: false,
+    isScanningTechDebt: false,
     statusMessage: "",
   };
 
@@ -321,6 +326,20 @@ class UIStore extends EventEmitter {
     this.emit("model-changed", model);
   }
 
+  // -- Tech debt scan -------------------------------------------------------
+
+  /** Mark that a tech debt scan is in progress. */
+  startTechDebtScan(): void {
+    this.state.isScanningTechDebt = true;
+    this.emitChange();
+  }
+
+  /** Mark that the tech debt scan has finished. */
+  finishTechDebtScan(): void {
+    this.state.isScanningTechDebt = false;
+    this.emitChange();
+  }
+
   /** Emit a quit request so the CLI entry point can perform graceful shutdown. */
   requestQuit(): void {
     this.emit("quit");
@@ -342,6 +361,7 @@ class UIStore extends EventEmitter {
     this.state.featureReviewActive = false;
     this.state.flashMessage = "";
     this.state.isSelectingModel = false;
+    this.state.isScanningTechDebt = false;
     this.state.statusMessage = "";
     this.emitChange();
   }

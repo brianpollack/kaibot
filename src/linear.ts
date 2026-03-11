@@ -1,11 +1,19 @@
-import { mkdirSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  rmdirSync,
+  writeFileSync,
+} from "fs";
+import { dirname, join, resolve, sep } from "path";
 
 import { extractDescription } from "./changelog.js";
 import type { Feature } from "./feature.js";
 import { slugify } from "./slugify.js";
 
-import { LinearClient, LinearFetch, User, Issue } from "@linear/sdk";
+import { LinearClient, LinearFetch, User, Issue, Team } from "@linear/sdk";
 
 export interface LinearIssue {
   id: string;
@@ -19,6 +27,13 @@ export interface LinearIssue {
     name: string;
     type: string;
   } | null;
+}
+
+export interface LinearTeamSetup {
+  teamId: string;
+  teamLabel: string;
+  startedStateId: string | null;
+  completedStateId: string | null;
 }
 
 export function getLinearConfigFromEnv(): { apiKey: string; teamRef: string } | null {
@@ -64,7 +79,7 @@ export class LocalLinearClient {
       for (const issue of myIssues.nodes) {
         const mapped = await this.mapIssue(issue);
         const type = mapped.state?.type?.toLowerCase() ?? "";
-        console.log(`Issue ${mapped.id} / ${mapped.identifier} is in state type: ${type}`);
+        // console.log(`Issue ${mapped.id} / ${mapped.identifier} is in state type: ${type}`);
         if (type === "triage" || type === "backlog" || type === "unstarted") {
           candidates.push(mapped);
         }
@@ -106,6 +121,32 @@ export class LocalLinearClient {
     }
   }
 
+  async resolveTeamSetup(teamRef: string): Promise<LinearTeamSetup> {
+    const normalizedRef = teamRef.trim();
+    if (!normalizedRef) {
+      throw new Error("Linear team reference is required.");
+    }
+
+    const team = await this.findTeam(normalizedRef);
+    if (!team) {
+      throw new Error(`Linear team not found: ${normalizedRef}`);
+    }
+
+    const stateConnection = await team.states();
+    const states = stateConnection.nodes ?? [];
+    const started =
+      states.find((state) => state.type.toLowerCase() === "started") ??
+      (team.startWorkflowState ? await Promise.resolve(team.startWorkflowState) : null);
+    const completed = states.find((state) => state.type.toLowerCase() === "completed") ?? null;
+
+    return {
+      teamId: team.id,
+      teamLabel: `${team.key} (${team.name})`,
+      startedStateId: started?.id ?? null,
+      completedStateId: completed?.id ?? null,
+    };
+  }
+
   private async mapIssue(issue: Issue): Promise<LinearIssue> {
     const resolvedState = issue.state ? await Promise.resolve(issue.state) : null;
 
@@ -132,6 +173,20 @@ export class LocalLinearClient {
           : null,
     };
   }
+
+  private async findTeam(teamRef: string): Promise<Team | null> {
+    const byKey = await this.client.teams({
+      first: 1,
+      filter: { key: { eqIgnoreCase: teamRef } },
+    });
+    if (byKey.nodes.length > 0) return byKey.nodes[0];
+
+    const byName = await this.client.teams({
+      first: 1,
+      filter: { name: { eqIgnoreCase: teamRef } },
+    });
+    return byName.nodes[0] ?? null;
+  }
 }
 
 /**
@@ -157,19 +212,103 @@ export function materializeLinearIssue(projectDir: string, issue: LinearIssue): 
   };
 }
 
-export function buildLinearCompletionComment(feature: Feature, identifier: string): string {
+/**
+ * Delete a materialized Linear workfile and prune empty directories under
+ * {projectDir}/.kaibot/linear.
+ */
+export function cleanupMaterializedLinearWorkfile(projectDir: string, filePath: string): void {
+  const linearDir = resolve(join(projectDir, ".kaibot", "linear"));
+  const targetPath = resolve(filePath);
+  const linearPrefix = `${linearDir}${sep}`;
+
+  // Safety guard: only delete files that are under .kaibot/linear.
+  if (!targetPath.startsWith(linearPrefix)) return;
+
+  if (existsSync(targetPath)) {
+    rmSync(targetPath, { force: true });
+  }
+
+  let current = dirname(targetPath);
+  while (current.startsWith(linearDir)) {
+    if (existsSync(current) && readdirSync(current).length === 0) {
+      rmdirSync(current);
+    } else {
+      break;
+    }
+
+    if (current === linearDir) break;
+    current = dirname(current);
+  }
+}
+
+/**
+ * Remove stale local Linear workfiles from previous runs.
+ */
+export function cleanupStaleLinearWorkfiles(projectDir: string): void {
+  const linearDir = resolve(join(projectDir, ".kaibot", "linear"));
+  if (!existsSync(linearDir)) return;
+  rmSync(linearDir, { recursive: true, force: true });
+}
+
+function getSectionLines(content: string, heading: string): string[] {
+  const lines = content.split("\n");
+  const start = lines.findIndex(
+    (line) => line.trim().toLowerCase() === `## ${heading.toLowerCase()}`,
+  );
+  if (start === -1) return [];
+
+  const section: string[] = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim().startsWith("## ")) break;
+    section.push(line);
+  }
+  return section;
+}
+
+export function buildLinearPlanComment(identifier: string, planSection: string): string {
+  return [`KaiBot started work on ${identifier}.`, "", "### Plan", "", planSection.trim()].join(
+    "\n",
+  );
+}
+
+export function buildLinearCompletionComment(
+  feature: Feature,
+  identifier: string,
+  changedFiles: string[] = [],
+): string {
   let summary = feature.name;
+  let metadataLines: string[] = [];
   try {
     const content = readFileSync(feature.filePath, "utf8");
     summary = extractDescription(content, feature.name);
+    metadataLines = getSectionLines(content, "Metadata")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("- **"));
   } catch {
     // Best effort only
   }
 
+  const changedFileLines =
+    changedFiles.length > 0
+      ? changedFiles.map((file) => `- \`${file}\``)
+      : ["- (No tracked file changes detected)"];
+
+  const metaLines =
+    metadataLines.length > 0
+      ? metadataLines
+      : ["- **Cost:** unavailable", "- **Turns:** unavailable"];
+
   return [
     `KaiBot completed ${identifier}.`,
     "",
-    `Summary: ${summary}`,
-    `Workfile: ${feature.filePath}`,
+    "### Summary",
+    summary,
+    "",
+    "### Changed Files",
+    ...changedFileLines,
+    "",
+    "### Run Metadata",
+    ...metaLines,
   ].join("\n");
 }

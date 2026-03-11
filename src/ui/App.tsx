@@ -11,6 +11,7 @@ import {
 } from "./store.js";
 import { reviewAndWriteFeature } from "../feature_creator.js";
 import { MODELS } from "../models.js";
+import { runTechDebtScan } from "../tech_debt.js";
 
 // ---------------------------------------------------------------------------
 // Hook: subscribe to UIStore changes
@@ -417,26 +418,30 @@ function HotkeyBar({
   status,
   flashMessage,
   featureReviewActive,
+  isScanningTechDebt,
   cols,
 }: {
   status: BotStatus;
   flashMessage: string;
   featureReviewActive: boolean;
+  isScanningTechDebt: boolean;
   cols: number;
 }): React.JSX.Element | null {
   if (status !== "watching") return null;
 
   const dividerWidth = Math.max(cols, 40);
 
+  const isSpinning = featureReviewActive || isScanningTechDebt;
+
   return (
     <Box flexDirection="column">
       <Text dimColor>{"─".repeat(dividerWidth)}</Text>
       <Box>
-        {featureReviewActive ? (
+        {isSpinning ? (
           <Box>
             <Spinner color="cyan" />
             <Text color="cyan" bold>
-              {" " + (flashMessage || "Reviewing feature with AI agent…")}
+              {" " + (flashMessage || (isScanningTechDebt ? "Scanning for tech debt…" : "Reviewing feature with AI agent…"))}
             </Text>
           </Box>
         ) : flashMessage ? (
@@ -449,6 +454,10 @@ function HotkeyBar({
               {"[F]"}
             </Text>
             <Text dimColor>{" New Feature  "}</Text>
+            <Text color="cyan" bold>
+              {"[S]"}
+            </Text>
+            <Text dimColor>{" Tech Debt  "}</Text>
             <Text color="cyan" bold>
               {"[M]"}
             </Text>
@@ -709,6 +718,7 @@ export function App(): React.JSX.Element {
     !state.hotkeyInputActive &&
     !state.isSelectingModel &&
     !state.featureReviewActive &&
+    !state.isScanningTechDebt &&
     !state.commitPrompt.visible;
 
   const handleHotkey = useCallback(
@@ -728,6 +738,26 @@ export function App(): React.JSX.Element {
       if (input.toLowerCase() === "m") {
         uiStore.clearFlashMessage();
         uiStore.startModelSelection();
+      }
+
+      if (input.toLowerCase() === "s") {
+        uiStore.clearFlashMessage();
+        uiStore.startTechDebtScan();
+        uiStore.setFlashMessage("Scanning for tech debt…");
+
+        const { projectDir, model } = uiStore.getState();
+
+        runTechDebtScan(projectDir, model)
+          .then(() => {
+            uiStore.finishTechDebtScan();
+            uiStore.setFlashMessage("Tech debt scan complete — see todo.md");
+            setTimeout(() => uiStore.clearFlashMessage(), 4000);
+          })
+          .catch(() => {
+            uiStore.finishTechDebtScan();
+            uiStore.setFlashMessage("Error running tech debt scan");
+            setTimeout(() => uiStore.clearFlashMessage(), 4000);
+          });
       }
     },
     [],
@@ -811,6 +841,7 @@ export function App(): React.JSX.Element {
         status={state.status}
         flashMessage={state.flashMessage}
         featureReviewActive={state.featureReviewActive}
+        isScanningTechDebt={state.isScanningTechDebt}
         cols={cols}
       />
       <StatusBar statusMessage={state.statusMessage} cols={cols} />
