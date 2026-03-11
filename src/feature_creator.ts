@@ -6,6 +6,39 @@ import { KaiClient } from "./KaiClient.js";
 import { slugify } from "./slugify.js";
 
 // ---------------------------------------------------------------------------
+// Name derivation from description
+// ---------------------------------------------------------------------------
+
+const STOP_WORDS = new Set([
+  "the", "a", "an", "and", "or", "to", "for", "in", "on", "with",
+  "is", "it", "of", "by", "as", "at", "be", "if", "so", "no",
+  "not", "but", "from", "that", "this", "then", "than", "into",
+]);
+
+/**
+ * Derives a short feature name from the first line/sentence of a description.
+ *
+ * Takes the first ~5 meaningful words (filtering out stop words) from the
+ * first line of the description text.
+ */
+export function deriveFeatureName(description: string): string {
+  // Use the first line (or first sentence) of the description
+  const firstLine = description.split("\n")[0].trim();
+
+  const words = firstLine
+    .split(/\s+/)
+    .map((w) => w.replace(/[^a-zA-Z0-9]/g, ""))
+    .filter((w) => w.length > 0);
+
+  const meaningful = words.filter((w) => !STOP_WORDS.has(w.toLowerCase()));
+
+  // Take at most 5 meaningful words; fall back to all words if none are meaningful
+  const selected = meaningful.length > 0 ? meaningful.slice(0, 5) : words.slice(0, 5);
+
+  return selected.join(" ");
+}
+
+// ---------------------------------------------------------------------------
 // Readline helpers
 // ---------------------------------------------------------------------------
 
@@ -147,13 +180,13 @@ export function parseReviewResponse(response: string): ReviewResponse {
 
 /**
  * Interactive feature creation flow:
- * 1. Slugify the feature name from CLI args
+ * 1. Slugify the feature name from CLI args (or derive from description)
  * 2. Prompt user for feature details (multi-line)
  * 3. Send to agent for review / clarification
  * 4. Write the final feature .md file
  *
  * @param projectDir - Absolute path to the target project
- * @param nameWords  - The feature name words from CLI args (e.g. ["This", "is", "a", "feature"])
+ * @param nameWords  - The feature name words from CLI args (may be empty to auto-derive)
  * @param model      - Claude model to use for agent review
  */
 export async function createFeature(
@@ -161,21 +194,9 @@ export async function createFeature(
   nameWords: string[],
   model: string,
 ): Promise<string> {
-  const featureName = nameWords.join(" ");
-  const slug = slugify(featureName);
-
-  if (!slug) {
-    console.error("Error: Feature name is empty after slugification.");
-    process.exit(1);
-  }
+  const hasName = nameWords.length > 0;
 
   const featuresDir = join(projectDir, "features");
-  const filePath = join(featuresDir, `${slug}.md`);
-
-  if (existsSync(filePath)) {
-    console.error(`Error: Feature file already exists: ${filePath}`);
-    process.exit(1);
-  }
 
   // Ensure features/ directory exists
   mkdirSync(featuresDir, { recursive: true });
@@ -183,16 +204,66 @@ export async function createFeature(
   const rl = createRL();
 
   try {
-    console.log(`\nCreating feature: "${featureName}"`);
-    console.log(`File: features/${slug}.md\n`);
-    console.log("Describe the feature details:");
+    let featureName: string;
+    let slug: string;
+    let details: string;
 
-    const details = await readMultiLine(rl);
+    if (hasName) {
+      // Name provided on CLI — existing flow
+      featureName = nameWords.join(" ");
+      slug = slugify(featureName);
 
-    if (!details.trim()) {
-      console.error("Error: No feature details provided.");
-      process.exit(1);
+      if (!slug) {
+        console.error("Error: Feature name is empty after slugification.");
+        process.exit(1);
+      }
+
+      const filePath = join(featuresDir, `${slug}.md`);
+      if (existsSync(filePath)) {
+        console.error(`Error: Feature file already exists: ${filePath}`);
+        process.exit(1);
+      }
+
+      console.log(`\nCreating feature: "${featureName}"`);
+      console.log(`File: features/${slug}.md\n`);
+      console.log("Describe the feature details:");
+
+      details = await readMultiLine(rl);
+
+      if (!details.trim()) {
+        console.error("Error: No feature details provided.");
+        process.exit(1);
+      }
+    } else {
+      // No name provided — collect description first, then derive name
+      console.log("\nDescribe the feature details:");
+
+      details = await readMultiLine(rl);
+
+      if (!details.trim()) {
+        console.error("Error: No feature details provided.");
+        process.exit(1);
+      }
+
+      featureName = deriveFeatureName(details);
+      slug = slugify(featureName);
+
+      if (!slug) {
+        console.error("Error: Could not derive a feature name from the description.");
+        process.exit(1);
+      }
+
+      const filePath = join(featuresDir, `${slug}.md`);
+      if (existsSync(filePath)) {
+        console.error(`Error: Feature file already exists: ${filePath}`);
+        process.exit(1);
+      }
+
+      console.log(`\nAuto-generated feature name: "${featureName}"`);
+      console.log(`File: features/${slug}.md\n`);
     }
+
+    const filePath = join(featuresDir, `${slug}.md`);
 
     console.log("\nReviewing feature details with AI agent...\n");
 

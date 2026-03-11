@@ -19,3 +19,6 @@ Implemented a right-side plan panel occupying 40% of the terminal width. Changes
 March 10th, 2026: main: brian
 Implemented the `npm run feature` CLI command for interactive feature file creation. The user provides a feature name via CLI args (e.g., `npm run feature -- Add user authentication`), which gets slugified into a filename (`add_user_authentication.md`). The user then enters feature details via multiline stdin input. A Claude agent reviews the details and either asks clarifying questions (up to 3 rounds) or writes a polished feature specification to `features/<slug>.md`. New files: `src/slugify.ts` (slug utility), `src/feature_creator.ts` (interactive flow with agent review), plus 17 new tests across two test files.
 
+March 10th, 2026: main: brian
+Implemented auto-generation of feature names from descriptions when `npm run feature` is invoked without a name argument. Changes:
+

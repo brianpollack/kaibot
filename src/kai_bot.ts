@@ -19,13 +19,6 @@ if (subcommand === "models") {
 
 if (subcommand === "feature") {
   const nameWords = process.argv.slice(3);
-  if (nameWords.length === 0) {
-    console.error("Usage: tsx src/kai_bot.ts feature <feature name words...>");
-    console.error("  Example: tsx src/kai_bot.ts feature Add user authentication");
-    console.error("\nThe feature name will be slugified into the .md filename.");
-    console.error("You will then be prompted to enter feature details interactively.");
-    process.exit(1);
-  }
 
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error("Error: ANTHROPIC_API_KEY environment variable is not set.");
