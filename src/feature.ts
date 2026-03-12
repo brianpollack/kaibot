@@ -1,5 +1,5 @@
 import { basename, dirname, join } from "path";
-import { renameSync } from "fs";
+import { mkdirSync, renameSync } from "fs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -74,10 +74,14 @@ export function markInProgress(feature: Feature): Feature {
 }
 
 /**
- * Renames  features/my_feature_inprogress.md  →  features/my_feature_complete.md
+ * Moves  features/my_feature_inprogress.md  →  features/complete/my_feature.md
+ *
+ * Creates the `complete/` subdirectory if it doesn't already exist.
  */
 export function markComplete(feature: Feature): Feature {
-  const newPath = join(dirname(feature.filePath), `${feature.name}_complete.md`);
+  const completeDir = join(dirname(feature.filePath), "complete");
+  mkdirSync(completeDir, { recursive: true });
+  const newPath = join(completeDir, `${feature.name}.md`);
   renameSync(feature.filePath, newPath);
   return { ...feature, state: "complete", filePath: newPath };
 }

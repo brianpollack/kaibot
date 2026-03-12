@@ -135,19 +135,29 @@ describe("markComplete", () => {
     }
   });
 
-  it("renames _inprogress.md to _complete.md and returns updated Feature", () => {
+  it("moves _inprogress.md to complete/ subdirectory and returns updated Feature", () => {
     const src = join(tmpDir, "my_feature_inprogress.md");
     writeFileSync(src, "# My Feature\n## Plan\n- [x] Done\n");
 
     const inprogress = { name: "my_feature", state: "inprogress" as const, filePath: src };
     const updated = markComplete(inprogress);
 
-    const expectedPath = join(tmpDir, "my_feature_complete.md");
+    const expectedPath = join(tmpDir, "complete", "my_feature.md");
     expect(updated.state).toBe("complete");
     expect(updated.name).toBe("my_feature");
     expect(updated.filePath).toBe(expectedPath);
     expect(existsSync(expectedPath)).toBe(true);
     expect(existsSync(src)).toBe(false);
+  });
+
+  it("creates the complete/ directory if it does not exist", () => {
+    const src = join(tmpDir, "new_feat_inprogress.md");
+    writeFileSync(src, "# New\n");
+
+    const inprogress = { name: "new_feat", state: "inprogress" as const, filePath: src };
+    markComplete(inprogress);
+
+    expect(existsSync(join(tmpDir, "complete"))).toBe(true);
   });
 
   it("throws if source file does not exist", () => {

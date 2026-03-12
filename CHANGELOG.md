@@ -55,3 +55,6 @@ This feature was already fully implemented in prior commits. The `buildCommitMes
 March 11th, 2026: main: brian
 Implemented the Tech Debt scan feature activated by pressing **S** in the watching state.
 
+March 12th, 2026: main: brian
+Updated `markComplete` in `src/feature.ts` to move completed feature files into a `features/complete/` subdirectory (e.g., `features/complete/my_feature.md`) instead of renaming them with a `_complete` suffix in place. The `complete/` directory is created automatically if it doesn't exist. Updated tests in both `feature.test.ts` and `KaiBot.test.ts` to match the new behavior.
+

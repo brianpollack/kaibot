@@ -60,29 +60,48 @@ export class LocalLinearClient {
 
   async getNextReadyIssue(): Promise<LinearIssue | null> {
     const me = await this.client.viewer;
-    const myIssues = await me.assignedIssues();
+    // const myIssues = await me.assignedIssues();
 
-    // const unassigned = await this.client.issues({
-    //   filter: {
-    //     assignee: { null: true },
-    //   },
-    // });
+    const projects = await this.client.projects();
+    const myProjectName = process.env.LINEAR_PROJECT_NAME?.trim() || "";
+    if (!myProjectName) {
+      console.warn("LINEAR_PROJECT_NAME is not set.");
+      for (const p of projects.nodes) {
+        console.log(`Project: ${p.name} (${p.id})`);
+      }
+      return null;
+    }
+
+    let myProjectID = "";
+    for (const p of projects.nodes) {
+      if (p.name.toLowerCase() === myProjectName.toLowerCase()) {
+        myProjectID = p.id;
+      }
+    }
+
+    const myIssues = await this.client.issues({
+      filter: {
+        project: {
+          id: { eq: myProjectID },
+        },
+        state: {
+          type: { eq: "unstarted" },
+        },
+      },
+    });
 
     // const myIssues = unassigned;
 
     const candidates: LinearIssue[] = [];
 
     if (myIssues.nodes.length) {
-      // myIssues.nodes.map((issue) =>
-      //   console.log(`${me.displayName} has issue: ${issue.title} ${issue.team}/${issue.teamId}`),
-      // );
+      myIssues.nodes.map(async (issue) => {
+        const team_name = issue.team ? await Promise.resolve(issue.team) : "No Team";
+        console.log(`${me.displayName} has issue: ${issue.title} ${team_name}/${issue.teamId}`);
+      });
       for (const issue of myIssues.nodes) {
         const mapped = await this.mapIssue(issue);
-        const type = mapped.state?.type?.toLowerCase() ?? "";
-        // console.log(`Issue ${mapped.id} / ${mapped.identifier} is in state type: ${type}`);
-        if (type === "triage" || type === "backlog" || type === "unstarted") {
-          candidates.push(mapped);
-        }
+        candidates.push(mapped);
       }
     } else {
       console.log(`${me.displayName} has no issues`);

@@ -167,7 +167,7 @@ describe("KaiBot — handleFeature state transitions", () => {
     expect(originalExistedDuringCall).toBe(false);
   });
 
-  it("renames _inprogress to _complete on success", async () => {
+  it("moves _inprogress to features/complete/ on success", async () => {
     mockProcessFeature.mockResolvedValueOnce(undefined);
 
     writeFileSync(join(featuresDir, "auth_flow.md"), "# Auth Flow\n");
@@ -176,7 +176,7 @@ describe("KaiBot — handleFeature state transitions", () => {
     bypassSettleDelay(bot, "auth_flow");
     await priv(bot).checkForNewFeatures();
 
-    expect(existsSync(join(featuresDir, "auth_flow_complete.md"))).toBe(true);
+    expect(existsSync(join(featuresDir, "complete", "auth_flow.md"))).toBe(true);
     expect(existsSync(join(featuresDir, "auth_flow_inprogress.md"))).toBe(false);
   });
 
@@ -190,7 +190,7 @@ describe("KaiBot — handleFeature state transitions", () => {
     await priv(bot).checkForNewFeatures();
 
     expect(existsSync(join(featuresDir, "broken_feature_inprogress.md"))).toBe(true);
-    expect(existsSync(join(featuresDir, "broken_feature_complete.md"))).toBe(false);
+    expect(existsSync(join(featuresDir, "complete", "broken_feature.md"))).toBe(false);
   });
 });
 

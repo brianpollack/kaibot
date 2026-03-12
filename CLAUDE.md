@@ -65,3 +65,15 @@ ESM project (`"type": "module"`, NodeNext). All imports of local `.ts` files mus
 - `SDKResultMessage = SDKResultSuccess | SDKResultError` — narrow with `result.subtype === "success"`; `SDKResultSuccess` has `.result: string`, `SDKResultError` has `.errors: string[]`
 - `message.content` blocks resolve to `any` — use duck-typed guards: `(b as Record<string, unknown>).type === "text"`
 - `HookCallback` signature: `(input, toolUseID, options: { signal: AbortSignal }) => Promise<HookJSONOutput>`
+
+### Code Intelligence
+
+Prefer LSP over Grep/Read for code navigation — it's faster, precise, and avoids reading entire files:
+- `workspaceSymbol` to find where something is defined
+- `findReferences` to see all usages across the codebase
+- `goToDefinition` / `goToImplementation` to jump to source
+- `hover` for type info without reading the file
+
+Use Grep only when LSP isn't available or for text/pattern searches (comments, strings, config).
+
+After writing or editing code, check LSP diagnostics and fix errors before proceeding.
