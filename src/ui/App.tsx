@@ -122,7 +122,7 @@ function Header({
   const dividerWidth = Math.max(cols, 40) - 4;
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="row" justifyContent="space-between" paddingX={1}>
       <Box>
         <Text bold color="cyan">
           {"🤖 KaiBot "}
@@ -135,11 +135,11 @@ function Header({
         {featureName && <Text color="white">{" → " + featureName}</Text>}
         <StageBadge stage={featureStage} />
       </Box>
-      <Box>
+      <Box flexDirection="row" alignItems="flex-end">
         <Text dimColor>{"  📁 " + truncate(projectDir, dividerWidth - 20)}</Text>
+        <Text color="#202020">{" | "}</Text>
         <Text dimColor>{"  🧠 " + model}</Text>
       </Box>
-      <Text dimColor>{"─".repeat(dividerWidth)}</Text>
     </Box>
   );
 }
@@ -163,7 +163,7 @@ function ThinkingPanel({
   // Pad to target line count so the layout is stable
   const padded = [...displayLines];
   while (padded.length < visibleLines) padded.push("");
-  const lineWidth = Math.max(cols - 4, 40);
+  const lineWidth = Math.max(cols - 4, 60);
 
   return (
     <Box flexDirection="column">
@@ -191,7 +191,7 @@ function CommandPanel({
   cols: number;
 }): React.JSX.Element {
   // On wider terminals, show more of the command text
-  const cmdWidth = Math.max(cols - 8, 40);
+  const cmdWidth = Math.max(cols - 8, 60);
 
   return (
     <Box flexDirection="column">
@@ -372,21 +372,21 @@ function PlanPanel({
   cols: number;
 }): React.JSX.Element {
   const isComplete = featureStage === "complete";
-  const lineWidth = Math.max(cols - 4, 20);
+  const lineWidth = Math.max(cols - 4, 60);
 
   return (
-    <Box flexDirection="column" paddingLeft={1}>
+    <Box flexDirection="column" paddingLeft={1} borderColor="#404040" borderStyle="round">
       <Text bold color="cyan">
         {"📋 Plan"}
       </Text>
-      <Text dimColor>{"─".repeat(Math.max(cols - 2, 20))}</Text>
+      <Text dimColor>{"─".repeat(Math.max(cols - 4, 20))}</Text>
       {planLines.length === 0 ? (
         <Text dimColor>{"  (no plan yet)"}</Text>
       ) : (
         planLines.map((line, i) => (
           <Box key={i}>
             <Text color={line.checked ? "green" : "white"}>
-              {"  " + (line.checked ? "✅" : "⬜") + " "}
+              {"  " + (line.checked ? "✅ " : "⬜ ") + "  "}
             </Text>
             <Text color={line.checked ? "green" : "white"} dimColor={line.checked}>
               {truncate(line.text, lineWidth)}
@@ -441,7 +441,11 @@ function HotkeyBar({
           <Box>
             <Spinner color="cyan" />
             <Text color="cyan" bold>
-              {" " + (flashMessage || (isScanningTechDebt ? "Scanning for tech debt…" : "Reviewing feature with AI agent…"))}
+              {" " +
+                (flashMessage ||
+                  (isScanningTechDebt
+                    ? "Scanning for tech debt…"
+                    : "Reviewing feature with AI agent…"))}
             </Text>
           </Box>
         ) : flashMessage ? (

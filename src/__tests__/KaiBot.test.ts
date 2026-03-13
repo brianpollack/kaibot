@@ -9,17 +9,33 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../KaiAgent.js", () => ({
   processFeature: vi.fn(),
+  generateSummary: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("../changelog.js", () => ({
   appendChangelog: vi.fn(),
 }));
 
+vi.mock("../featureDb.js", () => ({
+  appendFeatureRecord: vi.fn(),
+}));
+
 import { KaiBot } from "../KaiBot.js";
-import { processFeature } from "../KaiAgent.js";
+import { type AgentStats, processFeature } from "../KaiAgent.js";
 import { uiStore } from "../ui/store.js";
 
 const mockProcessFeature = vi.mocked(processFeature);
+
+const stubStats: AgentStats = {
+  durationMs: 1000,
+  totalCostUsd: 0.001,
+  numTurns: 3,
+  tokensIn: 100,
+  tokensOut: 50,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  planPoints: [],
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -113,6 +129,7 @@ describe("KaiBot — checkForNewFeatures", () => {
     mockProcessFeature.mockImplementation(async () => {
       // Capture the status message while the feature is being processed
       capturedStatus = uiStore.getState().statusMessage;
+      return stubStats;
     });
 
     writeFileSync(join(featuresDir, "new_user.md"), "# New User\n");
@@ -125,7 +142,7 @@ describe("KaiBot — checkForNewFeatures", () => {
   });
 
   it("detects a new .md file and calls processFeature", async () => {
-    mockProcessFeature.mockResolvedValueOnce(undefined);
+    mockProcessFeature.mockResolvedValueOnce(stubStats);
     writeFileSync(join(featuresDir, "new_user.md"), "# New User\n");
 
     const bot = new KaiBot(tmpDir);
@@ -154,6 +171,7 @@ describe("KaiBot — handleFeature state transitions", () => {
       // Check file state at the moment processFeature is called
       inprogressExistedDuringCall = existsSync(join(featuresDir, "auth_flow_inprogress.md"));
       originalExistedDuringCall = existsSync(join(featuresDir, "auth_flow.md"));
+      return stubStats;
     });
 
     writeFileSync(join(featuresDir, "auth_flow.md"), "# Auth Flow\n");
@@ -168,7 +186,7 @@ describe("KaiBot — handleFeature state transitions", () => {
   });
 
   it("moves _inprogress to features/complete/ on success", async () => {
-    mockProcessFeature.mockResolvedValueOnce(undefined);
+    mockProcessFeature.mockResolvedValueOnce(stubStats);
 
     writeFileSync(join(featuresDir, "auth_flow.md"), "# Auth Flow\n");
 
@@ -200,7 +218,7 @@ describe("KaiBot — handleFeature state transitions", () => {
 
 describe("KaiBot — sequential processing", () => {
   it("processes only one feature per checkForNewFeatures call", async () => {
-    mockProcessFeature.mockResolvedValue(undefined);
+    mockProcessFeature.mockResolvedValue(stubStats);
 
     writeFileSync(join(featuresDir, "feature_a.md"), "# A\n");
     writeFileSync(join(featuresDir, "feature_b.md"), "# B\n");
@@ -217,7 +235,7 @@ describe("KaiBot — sequential processing", () => {
   });
 
   it("processes all features across multiple poll cycles", async () => {
-    mockProcessFeature.mockResolvedValue(undefined);
+    mockProcessFeature.mockResolvedValue(stubStats);
 
     writeFileSync(join(featuresDir, "feature_a.md"), "# A\n");
     writeFileSync(join(featuresDir, "feature_b.md"), "# B\n");
@@ -246,6 +264,7 @@ describe("KaiBot — sequential processing", () => {
       // Simulate some work
       await new Promise<void>((r) => setTimeout(r, 10));
       callOrder.push(`end:${feature.name}`);
+      return stubStats;
     });
 
     writeFileSync(join(featuresDir, "feature_x.md"), "# X\n");

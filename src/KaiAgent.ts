@@ -7,6 +7,22 @@ import { type Feature } from "./feature.js";
 import { KaiClient } from "./KaiClient.js";
 import { type PlanLine, uiStore } from "./ui/store.js";
 
+// ---------------------------------------------------------------------------
+// AgentStats — returned by processFeature for tracking purposes
+// ---------------------------------------------------------------------------
+
+export interface AgentStats {
+  durationMs: number;
+  totalCostUsd: number;
+  numTurns: number;
+  tokensIn: number;
+  tokensOut: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  /** Plan checkbox item labels collected at end of run */
+  planPoints: string[];
+}
+
 export interface ProcessFeatureOptions {
   onPlanCreated?: (planSection: string) => Promise<void> | void;
 }
@@ -57,6 +73,7 @@ Keep the feature file updated as you work — progress should be visible in real
  * Runs the agent against a single feature file from start (planning) to
  * finish (all steps executed), streaming output to the console.
  *
+ * Returns AgentStats for the completed run.
  * Throws if the agent ends with an error result.
  */
 export async function processFeature(
@@ -64,7 +81,7 @@ export async function processFeature(
   projectDir: string,
   model: string,
   options: ProcessFeatureOptions = {},
-): Promise<void> {
+): Promise<AgentStats> {
   const client = KaiClient.create(projectDir, model);
   const prompt = buildPrompt(feature, projectDir);
   const startTime = Date.now();
@@ -146,8 +163,23 @@ export async function processFeature(
         feature.filePath,
         `\n## Metadata\n\n- **Model:** ${model}\n- **Cost:** ${costStr}\n- **Turns:** ${result.num_turns}\n- **Time:** ${elapsedSec}s\n`,
       );
+
+      const planPoints = parsePlanLines(safeReadFileContent(feature.filePath)).map((l) => l.text);
+      return {
+        durationMs: result.duration_ms,
+        totalCostUsd: result.total_cost_usd,
+        numTurns: result.num_turns,
+        tokensIn: result.usage.input_tokens,
+        tokensOut: result.usage.output_tokens,
+        cacheReadTokens: result.usage.cache_read_input_tokens ?? 0,
+        cacheWriteTokens: result.usage.cache_creation_input_tokens ?? 0,
+        planPoints,
+      };
     }
   }
+
+  // Should not be reachable — SDK always emits a result message
+  throw new Error("[KaiAgent] Stream ended without a result message");
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +270,46 @@ function refreshPlanLines(filePath: string): void {
     }
   } catch {
     // File may not exist yet or may be mid-rename; ignore
+  }
+}
+
+function safeReadFileContent(filePath: string): string {
+  try {
+    return readFileSync(filePath, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Summary generation — uses a cheap model to produce a 2-3 sentence summary
+// ---------------------------------------------------------------------------
+
+const SUMMARY_MODEL = "claude-haiku-4-5-20251001";
+
+/**
+ * Calls a low-cost model to produce a concise 2-3 sentence summary of what
+ * was implemented.  Returns an empty string on any error so callers can
+ * gracefully degrade.
+ */
+export async function generateSummary(
+  feature: Feature,
+  projectDir: string,
+): Promise<string> {
+  const content = safeReadFileContent(feature.filePath);
+  if (!content) return "";
+
+  const prompt =
+    `The following is a completed software feature file. ` +
+    `Write a concise 2-3 sentence plain-English summary of what was implemented. ` +
+    `Do not use bullet points. Output only the summary, nothing else.\n\n` +
+    `<feature>\n${content}\n</feature>`;
+
+  try {
+    const client = new KaiClient(projectDir, SUMMARY_MODEL);
+    return (await client.run(prompt)).trim();
+  } catch {
+    return "";
   }
 }
 

@@ -37,11 +37,15 @@ function hasChanges(cwd: string): boolean {
 }
 
 /**
- * Extracts the original feature description from a feature file.
+ * Extracts the original user-written description from a feature file for use
+ * as a git commit message.
  *
  * Returns all non-empty content lines before any `## Plan`, `## Summary`, or
- * `## Metadata` section, joined into a single string. Falls back to the
- * provided fallback value if no description is found.
+ * `## Metadata` section, joined into a single string. This preserves the
+ * original intent as written before the agent ran.
+ *
+ * See also: `extractDescription` in changelog.ts, which instead prefers the
+ * agent-written `## Summary` section for use in the changelog and Linear.
  */
 export function extractFeatureDescription(
   content: string,

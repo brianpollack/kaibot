@@ -1,11 +1,14 @@
 import { execSync } from "child_process";
+import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
 import { appendChangelog } from "./changelog.js";
-import { promptAndCommit } from "./commit.js";
+import { extractFeatureDescription, promptAndCommit } from "./commit.js";
+import { getGitBranch, getLastCommitHash } from "./git.js";
 import { isNewFeatureFile, markComplete, markInProgress, parseFeature } from "./feature.js";
-import { processFeature } from "./KaiAgent.js";
+import { appendFeatureRecord } from "./featureDb.js";
+import { generateSummary, processFeature } from "./KaiAgent.js";
 import {
   buildLinearPlanComment,
   buildLinearCompletionComment,
@@ -117,8 +120,8 @@ export class KaiBot {
 
   private getWatchingMessage(): string {
     if (this.isLinearMode()) {
-      const target = this.linearTeamLabel ?? this.linearTeamRef ?? "Linear";
-      return `Watching Linear team ${target} for new issues…`;
+      const target = LocalLinearClient.getMyProjectName() || "<Team LINEAR_PROJECT_NAME not set>";
+      return `Watching Linear team '${target}' for new issues…`;
     }
     return `Watching ${this.featuresDir} for features…`;
   }
@@ -147,6 +150,7 @@ export class KaiBot {
     let feature = materializeLinearIssue(this.projectDir, issue);
     let shouldCleanupWorkfile = false;
     const preExistingChanges = getGitStatusPaths(this.projectDir);
+    const gitBranch = getGitBranch(this.projectDir);
 
     try {
       uiStore.setStatus("processing");
@@ -157,7 +161,7 @@ export class KaiBot {
         await this.linearClient.updateIssueState(issueId, this.linearStartedStateId);
       }
 
-      await processFeature(feature, this.projectDir, this.model, {
+      const stats = await processFeature(feature, this.projectDir, this.model, {
         onPlanCreated: async (planSection: string) => {
           if (!this.linearClient) return;
           const comment = buildLinearPlanComment(issueIdentifier, planSection);
@@ -168,7 +172,8 @@ export class KaiBot {
       feature = markComplete(feature);
       appendChangelog(feature, this.projectDir);
       const changedFiles = getNewlyChangedFiles(this.projectDir, preExistingChanges);
-      await promptAndCommit(feature, this.projectDir);
+      const committed = await promptAndCommit(feature, this.projectDir);
+      const gitCommitHash = committed ? getLastCommitHash(this.projectDir) : null;
 
       if (this.linearCompletedStateId) {
         await this.linearClient.updateIssueState(issueId, this.linearCompletedStateId);
@@ -178,6 +183,34 @@ export class KaiBot {
       const comment = buildLinearCompletionComment(feature, issueIdentifier, changedFiles);
       await this.linearClient.addComment(issueId, comment);
       shouldCleanupWorkfile = true;
+
+      const summary = await generateSummary(feature, this.projectDir);
+
+      appendFeatureRecord(this.projectDir, {
+        id: randomUUID(),
+        requestedAt: issue.createdAt,
+        completedAt: new Date().toISOString(),
+        executionTimeMs: stats.durationMs,
+        model: this.model,
+        tokensIn: stats.tokensIn,
+        tokensOut: stats.tokensOut,
+        cacheReadTokens: stats.cacheReadTokens,
+        cacheWriteTokens: stats.cacheWriteTokens,
+        totalCostUsd: stats.totalCostUsd,
+        numTurns: stats.numTurns,
+        filesChanged: changedFiles,
+        testsAdded: changedFiles.filter(isTestFile),
+        gitBranch,
+        gitCommitHash,
+        description: issue.title,
+        planPoints: stats.planPoints,
+        source: "linear",
+        linearIssueId: issueId,
+        linearIdentifier: issueIdentifier,
+        status: "success",
+        errorMessage: null,
+        summary,
+      });
 
       uiStore.setStatusMessage(`Complete: ${issueIdentifier}`);
       uiStore.resetFeature();
@@ -238,17 +271,26 @@ export class KaiBot {
         continue;
       }
 
+      const requestedAt = new Date(this.seenAt.get(feature.name)!).toISOString();
       this.seenAt.delete(feature.name);
       uiStore.setStatusMessage(`Processing: ${file}`);
 
       // Process one feature at a time — await it before scanning for more.
-      await this.handleFeatureFile(join(this.featuresDir, file));
+      await this.handleFeatureFile(join(this.featuresDir, file), requestedAt);
       return;
     }
   }
 
-  private async handleFeatureFile(filePath: string): Promise<void> {
+  private async handleFeatureFile(filePath: string, requestedAt: string): Promise<void> {
     let feature = parseFeature(filePath);
+
+    // Capture description and git branch before the agent modifies the file
+    let featureDescription = feature.name;
+    try {
+      featureDescription = extractFeatureDescription(readFileSync(filePath, "utf8"), feature.name);
+    } catch { /* ignore */ }
+    const gitBranch = getGitBranch(this.projectDir);
+    const preExistingChanges = getGitStatusPaths(this.projectDir);
 
     try {
       uiStore.setStatus("processing");
@@ -257,13 +299,43 @@ export class KaiBot {
 
       feature = markInProgress(feature);
 
-      await processFeature(feature, this.projectDir, this.model);
+      const stats = await processFeature(feature, this.projectDir, this.model);
 
       feature = markComplete(feature);
       appendChangelog(feature, this.projectDir);
+      const changedFiles = getNewlyChangedFiles(this.projectDir, preExistingChanges);
 
       // Offer to auto-commit; defaults to Yes after 5s timeout
-      await promptAndCommit(feature, this.projectDir);
+      const committed = await promptAndCommit(feature, this.projectDir);
+      const gitCommitHash = committed ? getLastCommitHash(this.projectDir) : null;
+
+      const summary = await generateSummary(feature, this.projectDir);
+
+      appendFeatureRecord(this.projectDir, {
+        id: randomUUID(),
+        requestedAt,
+        completedAt: new Date().toISOString(),
+        executionTimeMs: stats.durationMs,
+        model: this.model,
+        tokensIn: stats.tokensIn,
+        tokensOut: stats.tokensOut,
+        cacheReadTokens: stats.cacheReadTokens,
+        cacheWriteTokens: stats.cacheWriteTokens,
+        totalCostUsd: stats.totalCostUsd,
+        numTurns: stats.numTurns,
+        filesChanged: changedFiles,
+        testsAdded: changedFiles.filter(isTestFile),
+        gitBranch,
+        gitCommitHash,
+        description: featureDescription,
+        planPoints: stats.planPoints,
+        source: "file",
+        linearIssueId: null,
+        linearIdentifier: null,
+        status: "success",
+        errorMessage: null,
+        summary,
+      });
 
       uiStore.setStatusMessage(`Complete: ${feature.name}`);
       uiStore.resetFeature();
@@ -357,4 +429,9 @@ function getNewlyChangedFiles(projectDir: string, baseline: Set<string>): string
     .filter((path) => !path.startsWith(".kaibot/linear/"))
     .sort((a, b) => a.localeCompare(b));
   return files;
+}
+
+/** Returns true for test files (*.test.*, *.spec.*, or inside __tests__/). */
+function isTestFile(filePath: string): boolean {
+  return /[._-]test\.[^./]+$|[._-]spec\.[^./]+$|__tests__[\\/]/.test(filePath);
 }

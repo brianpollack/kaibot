@@ -58,12 +58,14 @@ export class LocalLinearClient {
     return this.client.viewer;
   }
 
-  async getNextReadyIssue(): Promise<LinearIssue | null> {
-    const me = await this.client.viewer;
-    // const myIssues = await me.assignedIssues();
-
-    const projects = await this.client.projects();
+  static getMyProjectName(): string {
     const myProjectName = process.env.LINEAR_PROJECT_NAME?.trim() || "";
+    return myProjectName;
+  }
+
+  async getNextReadyIssue(): Promise<LinearIssue | null> {
+    const projects = await this.client.projects();
+    const myProjectName = LocalLinearClient.getMyProjectName();
     if (!myProjectName) {
       console.warn("LINEAR_PROJECT_NAME is not set.");
       for (const p of projects.nodes) {
@@ -90,21 +92,13 @@ export class LocalLinearClient {
       },
     });
 
-    // const myIssues = unassigned;
-
     const candidates: LinearIssue[] = [];
 
     if (myIssues.nodes.length) {
-      myIssues.nodes.map(async (issue) => {
-        const team_name = issue.team ? await Promise.resolve(issue.team) : "No Team";
-        console.log(`${me.displayName} has issue: ${issue.title} ${team_name}/${issue.teamId}`);
-      });
       for (const issue of myIssues.nodes) {
         const mapped = await this.mapIssue(issue);
         candidates.push(mapped);
       }
-    } else {
-      console.log(`${me.displayName} has no issues`);
     }
 
     if (candidates.length === 0) return null;

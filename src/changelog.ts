@@ -1,21 +1,8 @@
-import { execSync } from "child_process";
 import { appendFileSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 import type { Feature } from "./feature.js";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Returns the current git branch name, or "unknown" if not in a git repo. */
-function getGitBranch(cwd: string): string {
-  try {
-    return execSync("git rev-parse --abbrev-ref HEAD", { cwd, encoding: "utf8" }).trim();
-  } catch {
-    return "unknown";
-  }
-}
+import { getGitBranch } from "./git.js";
 
 /** Returns the current system user from environment variables. */
 function getUser(): string {
@@ -62,13 +49,20 @@ function formatDate(date: Date): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Extracts a changelog description from the feature file content.
+ * Extracts a description for use in the changelog and Linear comments.
+ *
+ * Prefers the agent-written `## Summary` section (polished, impersonal) over
+ * the raw user description, since the summary is appended after the feature
+ * is complete and tends to be more concise.
  *
  * Preference order:
- *   1. First non-empty line from the `## Summary` section (written by the
- *      agent after completing the feature — concise and impersonal).
+ *   1. First non-empty line from the `## Summary` section.
  *   2. First non-empty content line that isn't a heading or checkbox.
  *   3. The feature name as a last-resort fallback.
+ *
+ * See also: `extractFeatureDescription` in commit.ts, which instead extracts
+ * the original user-written description (text before `## Plan`) for use as
+ * a git commit message.
  */
 export function extractDescription(content: string, fallback: string): string {
   const lines = content.split("\n");

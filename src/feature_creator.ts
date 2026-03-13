@@ -102,7 +102,7 @@ async function readMultiLine(rl: ReturnType<typeof createInterface>): Promise<st
 // Agent review prompt
 // ---------------------------------------------------------------------------
 
-export function buildReviewPrompt(featureName: string, details: string): string {
+function buildReviewPrompt(featureName: string, details: string): string {
   return `You are helping a developer write a feature specification.
 
 The developer wants to create a feature called "${featureName}" with the following details:
