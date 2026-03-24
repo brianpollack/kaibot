@@ -112,3 +112,6 @@ Feature ID: H0owDjSb
 March 24th, 2026: main: brian
 Fixed `npm run testOpenrouter` model listing and improved the overall model discovery experience:
 
+March 24th, 2026: main: brian
+Added `OPENROUTER_MODEL` environment variable support for OpenRouter provider. When using OpenRouter, the model is resolved from `OPENROUTER_MODEL` (defaulting to `z-ai/glm-5-turbo`). The `npm run testOpenrouter` command now spawns an actual agent via `KaiClient` using the selected OpenRouter model, sends "Tell me about yourself", and prints the response to the console. Documentation updated in both CLAUDE.md and README.md.
+

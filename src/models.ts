@@ -68,6 +68,16 @@ export const OPENROUTER_MODELS: ModelInfo[] = [
 /** The model used when KAI_MODEL is not set. */
 export const DEFAULT_MODEL = "claude-opus-4-6";
 
+/** The model used when OPENROUTER_MODEL is not set and provider is openrouter. */
+export const DEFAULT_OPENROUTER_MODEL = "z-ai/glm-5-turbo";
+
+/**
+ * Returns the model to use for OpenRouter: OPENROUTER_MODEL env var, or the default.
+ */
+export function getOpenRouterModel(): string {
+  return process.env.OPENROUTER_MODEL ?? DEFAULT_OPENROUTER_MODEL;
+}
+
 // ---------------------------------------------------------------------------
 // Pricing (per million tokens)
 // ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ import { resolve } from "path";
 import { loadProjectEnv } from "./env.js";
 import { KaiBot } from "./KaiBot.js";
 import { createFeature } from "./feature_creator.js";
-import { printModels, type ProviderName } from "./models.js";
+import { getOpenRouterModel, printModels, type ProviderName } from "./models.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { mountUI, unmountUI } from "./ui/render.js";
 import { uiStore } from "./ui/store.js";
@@ -41,8 +41,23 @@ if (subcommand === "testOpenrouter") {
     process.exit(1);
   }
 
-  console.log("OpenRouter API key detected. Fetching available models…\n");
-  await printModels("openrouter");
+  const { KaiClient } = await import("./KaiClient.js");
+
+  const openRouterModel = getOpenRouterModel();
+  console.log(`OpenRouter API key detected. Using model: ${openRouterModel}\n`);
+  console.log("Spawning agent and asking: \"Tell me about yourself\"\n");
+
+  try {
+    const client = KaiClient.create(resolve("."), openRouterModel, "openrouter");
+    const result = await client.run("Tell me about yourself");
+    console.log("Agent response:\n");
+    console.log(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Error: ${msg}`);
+    process.exit(1);
+  }
+
   process.exit(0);
 }
 
@@ -107,8 +122,11 @@ if (!process.env.ANTHROPIC_API_KEY) {
 }
 
 const savedSettings = loadSettings(resolvedDir);
-const model = process.env.KAI_MODEL ?? savedSettings.model ?? "claude-opus-4-6";
 const provider: ProviderName = (savedSettings.provider as ProviderName) ?? "anthropic";
+const model =
+  provider === "openrouter"
+    ? getOpenRouterModel()
+    : process.env.KAI_MODEL ?? savedSettings.model ?? "claude-opus-4-6";
 
 // ---------------------------------------------------------------------------
 // Start

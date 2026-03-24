@@ -15,6 +15,7 @@ export KAI_MODEL=claude-opus-4-6   # optional, this is the default
 export LINEAR_API_KEY=lin_api_key_here   # optional, enables Linear mode
 export LINEAR_TEAM_KEY=KAIBOT            # optional, Linear team key/name
 export OPENROUTER_API_KEY=sk-or-...      # optional, enables OpenRouter provider
+export OPENROUTER_MODEL=z-ai/glm-5-turbo # optional, default OpenRouter model
 ```
 
 You can also place these in `<project>/.env`. KaiBot loads the target project's `.env` automatically.
@@ -27,7 +28,7 @@ You can also place these in `<project>/.env`. KaiBot loads the target project's 
 | `npm run local`                              | Same as `bot` but targets the current directory (`.`)         |
 | `npm run feature -- Add user authentication` | Create a Linear issue (when configured) or feature file with AI review |
 | `npm run models`                             | List available models (loads `.env`; pass `-- openrouter` for OpenRouter models) |
-| `npm run testOpenrouter`                     | Test OpenRouter connection and list available models           |
+| `npm run testOpenrouter`                     | Spawn an OpenRouter agent, ask "Tell me about yourself", and print the result |
 | `npm run dev`                                | Run the dev entry point (`src/index.ts`) via tsx              |
 | `npm start`                                  | Run the compiled bot from `dist/index.js` (requires a build)  |
 

@@ -15,7 +15,7 @@ npm run lint:fix     # ESLint with auto-fix
 npm run format       # Prettier format src/
 npm run test         # Run all tests (vitest run)
 npm run test:watch   # Run tests in watch mode
-npm run testOpenrouter  # Test OpenRouter connection and list available models
+npm run testOpenrouter  # Spawn an OpenRouter agent and ask "Tell me about yourself"
 ```
 
 Run a single test file:
@@ -23,7 +23,7 @@ Run a single test file:
 npx vitest run src/__tests__/feature.test.ts
 ```
 
-Set `ANTHROPIC_API_KEY` (required) and optionally `KAI_MODEL` (default: `claude-opus-4-6`) before running the bot or smoke tests. For Linear mode, also set `LINEAR_API_KEY` and `LINEAR_TEAM_KEY` (or `LINEAR_TEAM_NAME`). For OpenRouter support, set `OPENROUTER_API_KEY`. These can be stored in the target project's `.env`.
+Set `ANTHROPIC_API_KEY` (required) and optionally `KAI_MODEL` (default: `claude-opus-4-6`) before running the bot or smoke tests. For Linear mode, also set `LINEAR_API_KEY` and `LINEAR_TEAM_KEY` (or `LINEAR_TEAM_NAME`). For OpenRouter support, set `OPENROUTER_API_KEY` and optionally `OPENROUTER_MODEL` (default: `z-ai/glm-5-turbo`). These can be stored in the target project's `.env`.
 
 > **Note:** Whenever a new npm script is added to `package.json`, update both the `## Commands` section above **and** the `## Usage` section in `README.md` with a brief description.
 
