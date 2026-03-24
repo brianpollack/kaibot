@@ -544,5 +544,49 @@
     "errorMessage": null,
     "title": "Add cache expiration headers and robots.txt handler",
     "summary": "The feature updates the internal web server to add comprehensive no-cache headers to all HTTP responses, ensuring that CSS, JavaScript, and other resources expire immediately. A new `/robots.txt` route was also implemented to return a response that disallows all robots from crawling the site."
+  },
+  {
+    "id": "GKplGGJP",
+    "requestedAt": "2026-03-24T17:03:17.364Z",
+    "completedAt": "2026-03-24T17:07:58.571Z",
+    "executionTimeMs": 267919,
+    "model": "claude-opus-4-6",
+    "tokensIn": 31,
+    "tokensOut": 9369,
+    "cacheReadTokens": 1176067,
+    "cacheWriteTokens": 51941,
+    "totalCostUsd": 1.3132818000000002,
+    "numTurns": 33,
+    "filesChanged": [
+      ".kaibot/settings.json",
+      "CHANGELOG.md",
+      "features/complete/bxP0sCZh.md",
+      "src/__tests__/uiStoreSnapshots.test.ts",
+      "src/featureDb.ts",
+      "src/KaiBot.ts",
+      "src/ui/store.ts"
+    ],
+    "testsAdded": [
+      "src/__tests__/uiStoreSnapshots.test.ts"
+    ],
+    "gitBranch": "main",
+    "gitCommitHash": "efa53281ea90ad20145fcdd24cf7f843e2b4d296",
+    "description": "Feature ID: bxP0sCZh Add the conversation history points as JSON to the final log file that is created for each feature.   Add the File actvity information to that same json file.   Make sure there are time stamped elemented.",
+    "planPoints": [
+      "1. Add timestamp field to FileOp interface in ui/store.ts and populate it in pushFileOp — added `timestamp: number` to FileOp, auto-populated in pushFileOp",
+      "2. Add snapshot methods to UIStore (getConversationSnapshot, getFileActivitySnapshot) that return serializable arrays with timestamps — added ConversationLogEntry/FileActivityLogEntry types and snapshot methods",
+      "3. Add conversationHistory and fileActivity fields to the FeatureRecord type in featureDb.ts — added optional ConversationLogEntry[] and FileActivityLogEntry[] fields",
+      "4. Collect conversation/file activity data in KaiBot.handleFeatureFile and pass to writeFeatureLog — snapshot captured before uiStore reset, included in record",
+      "5. Also collect and pass data in KaiBot.handleLinearIssue for Linear mode — added snapshot capture before reset in Linear path too",
+      "6. Add tests for the new snapshot methods and timestamp behavior — 9 tests in uiStoreSnapshots.test.ts, all passing",
+      "7. Run typecheck and lint to verify everything compiles cleanly — typecheck clean, lint clean (errors), all 228 tests pass"
+    ],
+    "source": "file",
+    "linearIssueId": null,
+    "linearIdentifier": null,
+    "status": "success",
+    "errorMessage": null,
+    "title": "",
+    "summary": "The implementation added timestamped conversation history and file activity tracking to feature log JSON files by introducing a `timestamp` field to the `FileOp` interface and two new snapshot methods on `UIStore` that capture serializable arrays with ISO 8601 timestamps. The `FeatureRecord` type was extended with optional fields for conversation history and file activity data, and both the file-mode and Linear-mode processing paths in `KaiBot` were updated to capture and include these snapshots in the final log output."
   }
 ]

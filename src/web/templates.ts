@@ -60,8 +60,10 @@ export function renderMainPage(server: WebServer): string {
         <kbd id="model-hotkey" aria-label="Press M to change model">M</kbd>
         <span id="current-model">${esc(model)}</span>
       </span>
-      <span class="status-item" title="LLM provider">
-        <kbd id="provider-hotkey" aria-label="Press P to change provider (future)">P</kbd>
+      <span class="status-item model-selector-trigger" id="provider-trigger"
+            title="Click or press P to change provider" role="button" tabindex="0"
+            aria-haspopup="listbox" aria-expanded="false">
+        <kbd id="provider-hotkey" aria-label="Press P to change provider">P</kbd>
         <span id="current-provider">${esc(provider)}</span>
       </span>
       <span class="status-item" title="Estimated spend today">

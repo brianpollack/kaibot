@@ -1,4 +1,42 @@
 // ---------------------------------------------------------------------------
+// Providers
+// ---------------------------------------------------------------------------
+
+export type ProviderName = "anthropic" | "openrouter";
+
+export interface ProviderInfo {
+  id: ProviderName;
+  label: string;
+  description: string;
+}
+
+export const PROVIDERS: ProviderInfo[] = [
+  { id: "anthropic",   label: "Anthropic",   description: "Direct Anthropic API" },
+  { id: "openrouter",  label: "OpenRouter",  description: "OpenRouter multi-model gateway" },
+];
+
+export const DEFAULT_PROVIDER: ProviderName = "anthropic";
+
+/**
+ * Returns true if the OPENROUTER_API_KEY environment variable is set,
+ * meaning OpenRouter is available as a provider option.
+ */
+export function isOpenRouterAvailable(): boolean {
+  return Boolean(process.env.OPENROUTER_API_KEY);
+}
+
+/**
+ * Returns only the providers that are currently available (i.e. have required API keys set).
+ */
+export function getAvailableProviders(): ProviderInfo[] {
+  return PROVIDERS.filter((p) => {
+    if (p.id === "anthropic") return Boolean(process.env.ANTHROPIC_API_KEY);
+    if (p.id === "openrouter") return isOpenRouterAvailable();
+    return false;
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Supported Claude models
 // ---------------------------------------------------------------------------
 
@@ -15,6 +53,16 @@ export const MODELS: ModelInfo[] = [
   { id: "claude-opus-4-6",       description: "Most capable — deep analysis & complex coding" },
   { id: "claude-sonnet-4-6",     description: "Balanced — strong coding at lower cost" },
   { id: "claude-haiku-4-5",      description: "Fastest — quick tasks & lightweight agents" },
+];
+
+/**
+ * OpenRouter models available when using the OpenRouter provider.
+ * These are the Claude models available through OpenRouter.
+ */
+export const OPENROUTER_MODELS: ModelInfo[] = [
+  { id: "anthropic/claude-opus-4",   description: "Claude Opus 4 via OpenRouter" },
+  { id: "anthropic/claude-sonnet-4", description: "Claude Sonnet 4 via OpenRouter" },
+  { id: "anthropic/claude-haiku-4",  description: "Claude Haiku 4 via OpenRouter" },
 ];
 
 /** The model used when KAI_MODEL is not set. */
@@ -79,6 +127,7 @@ interface ApiModelListResponse {
 // ---------------------------------------------------------------------------
 
 const MODELS_ENDPOINT = "https://api.anthropic.com/v1/models";
+const OPENROUTER_MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models";
 
 /**
  * Fetches the list of available models from the Anthropic API.
@@ -103,6 +152,54 @@ export async function fetchModels(apiKey: string): Promise<ApiModel[]> {
   return json.data;
 }
 
+/** Shape returned by the OpenRouter /api/v1/models endpoint. */
+interface OpenRouterModel {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+interface OpenRouterModelListResponse {
+  data: OpenRouterModel[];
+}
+
+/**
+ * Fetches available models from the OpenRouter API.
+ * Filters to only Claude/Anthropic models for relevance.
+ */
+export async function fetchOpenRouterModels(apiKey: string): Promise<ApiModel[]> {
+  const response = await fetch(OPENROUTER_MODELS_ENDPOINT, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`OpenRouter API error (${response.status}): ${body}`);
+  }
+
+  const json = (await response.json()) as OpenRouterModelListResponse;
+
+  // Filter to anthropic/claude models only for relevance
+  return json.data
+    .filter((m) => m.id.startsWith("anthropic/claude"))
+    .map((m) => ({
+      type: "model",
+      id: m.id,
+      display_name: m.name || m.id,
+      created_at: "",
+    }));
+}
+
+/**
+ * Returns the models list appropriate for the given provider.
+ * Fetches live data when possible; falls back to static lists.
+ */
+export function getModelsForProvider(provider: ProviderName): ModelInfo[] {
+  return provider === "openrouter" ? OPENROUTER_MODELS : MODELS;
+}
+
 // ---------------------------------------------------------------------------
 // Display helpers
 // ---------------------------------------------------------------------------
@@ -124,38 +221,61 @@ function formatPricing(pricing: ModelPricing): string {
  * the Anthropic API when an API key is available; falls back to the static
  * MODELS list otherwise. Includes per-million-token pricing when known.
  */
-export async function printModels(): Promise<void> {
+export async function printModels(provider: ProviderName = "anthropic"): Promise<void> {
   const current = process.env.KAI_MODEL ?? DEFAULT_MODEL;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
 
   let models: Array<{ id: string; displayName: string }>;
   let isLive = false;
 
-  if (apiKey) {
-    try {
-      const apiModels = await fetchModels(apiKey);
-      models = apiModels
-        .sort((a, b) => a.display_name.localeCompare(b.display_name))
-        .map((m) => ({ id: m.id, displayName: m.display_name }));
-      isLive = true;
-    } catch {
-      // Fall back to static list on API error
-      models = MODELS.map((m) => ({
+  if (provider === "openrouter") {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (apiKey) {
+      try {
+        const apiModels = await fetchOpenRouterModels(apiKey);
+        models = apiModels
+          .sort((a, b) => a.display_name.localeCompare(b.display_name))
+          .map((m) => ({ id: m.id, displayName: m.display_name }));
+        isLive = true;
+      } catch {
+        models = OPENROUTER_MODELS.map((m) => ({
+          id: m.id,
+          displayName: m.description,
+        }));
+      }
+    } else {
+      models = OPENROUTER_MODELS.map((m) => ({
         id: m.id,
         displayName: m.description,
       }));
     }
   } else {
-    models = MODELS.map((m) => ({
-      id: m.id,
-      displayName: m.description,
-    }));
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (apiKey) {
+      try {
+        const apiModels = await fetchModels(apiKey);
+        models = apiModels
+          .sort((a, b) => a.display_name.localeCompare(b.display_name))
+          .map((m) => ({ id: m.id, displayName: m.display_name }));
+        isLive = true;
+      } catch {
+        models = MODELS.map((m) => ({
+          id: m.id,
+          displayName: m.description,
+        }));
+      }
+    } else {
+      models = MODELS.map((m) => ({
+        id: m.id,
+        displayName: m.description,
+      }));
+    }
   }
 
+  const providerLabel = provider === "openrouter" ? "OpenRouter" : "Claude";
   console.log(
     isLive
-      ? "Available Claude models (live from API):\n"
-      : "Available Claude models:\n",
+      ? `Available ${providerLabel} models (live from API):\n`
+      : `Available ${providerLabel} models:\n`,
   );
 
   // Calculate column widths for alignment

@@ -9,6 +9,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 
 import { bashSecurityHook } from "./security.js";
+import type { ProviderName } from "./models.js";
 
 // ---------------------------------------------------------------------------
 // Tool lists
@@ -97,15 +98,41 @@ export function buildSystemPrompt(projectDir: string): string {
 export class KaiClient {
   readonly projectDir: string;
   readonly model: string;
+  readonly provider: ProviderName;
 
   private readonly settingsFile: string;
 
-  constructor(projectDir: string, model: string) {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error(
-        "ANTHROPIC_API_KEY environment variable not set.\n" +
-          "Get your API key from: https://console.anthropic.com/",
-      );
+  /** Saved env values to restore when switching away from OpenRouter. */
+  private savedEnv: { apiKey?: string; baseUrl?: string; authToken?: string } = {};
+
+  constructor(projectDir: string, model: string, provider: ProviderName = "anthropic") {
+    this.provider = provider;
+
+    // For OpenRouter, configure the SDK to use OpenRouter's API
+    if (provider === "openrouter") {
+      if (!process.env.OPENROUTER_API_KEY) {
+        throw new Error(
+          "OPENROUTER_API_KEY environment variable not set.\n" +
+            "Get your API key from: https://openrouter.ai/keys",
+        );
+      }
+      // Save current env values for potential restoration
+      this.savedEnv = {
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        baseUrl: process.env.ANTHROPIC_BASE_URL,
+        authToken: process.env.ANTHROPIC_AUTH_TOKEN,
+      };
+      // Configure env vars for Claude Agent SDK to use OpenRouter
+      process.env.ANTHROPIC_BASE_URL = "https://openrouter.ai/api";
+      process.env.ANTHROPIC_AUTH_TOKEN = process.env.OPENROUTER_API_KEY;
+      process.env.ANTHROPIC_API_KEY = "";
+    } else {
+      if (!process.env.ANTHROPIC_API_KEY) {
+        throw new Error(
+          "ANTHROPIC_API_KEY environment variable not set.\n" +
+            "Get your API key from: https://console.anthropic.com/",
+        );
+      }
     }
 
     this.projectDir = resolve(projectDir);
@@ -127,10 +154,30 @@ export class KaiClient {
   /**
    * Convenience factory: constructs and initializes the client in one step.
    */
-  static create(projectDir: string, model: string): KaiClient {
-    const client = new KaiClient(projectDir, model);
+  static create(projectDir: string, model: string, provider: ProviderName = "anthropic"): KaiClient {
+    const client = new KaiClient(projectDir, model, provider);
     client.init();
     return client;
+  }
+
+  /**
+   * Restore environment variables to their pre-OpenRouter state.
+   * Call this when switching back from OpenRouter to Anthropic.
+   */
+  restoreEnv(): void {
+    if (this.provider === "openrouter" && this.savedEnv.apiKey !== undefined) {
+      process.env.ANTHROPIC_API_KEY = this.savedEnv.apiKey;
+      if (this.savedEnv.baseUrl !== undefined) {
+        process.env.ANTHROPIC_BASE_URL = this.savedEnv.baseUrl;
+      } else {
+        delete process.env.ANTHROPIC_BASE_URL;
+      }
+      if (this.savedEnv.authToken !== undefined) {
+        process.env.ANTHROPIC_AUTH_TOKEN = this.savedEnv.authToken;
+      } else {
+        delete process.env.ANTHROPIC_AUTH_TOKEN;
+      }
+    }
   }
 
   /**

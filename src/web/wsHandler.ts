@@ -12,6 +12,7 @@ export interface WebUIState {
   status: UIState["status"];
   projectDir: string;
   model: string;
+  provider: string;
   featureName: string | null;
   featureStage: UIState["featureStage"];
   featureStartTime: number | null;
@@ -41,6 +42,7 @@ export function getWebState(): WebUIState {
     status: s.status,
     projectDir: s.projectDir,
     model: s.model,
+    provider: s.provider,
     featureName: s.featureName,
     featureStage: s.featureStage,
     featureStartTime: s.featureStartTime,
@@ -95,6 +97,9 @@ export function setupWebSocketHandler(wss: WebSocketServer): void {
         const msg = JSON.parse(typeof raw === "string" ? raw : raw.toString());
         if (msg.type === "select-model" && typeof msg.model === "string") {
           uiStore.selectModel(msg.model);
+        }
+        if (msg.type === "select-provider" && typeof msg.provider === "string") {
+          uiStore.selectProvider(msg.provider);
         }
       } catch {
         // Ignore malformed messages

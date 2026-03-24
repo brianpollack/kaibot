@@ -25,6 +25,7 @@ import {
   type LinearIssue,
   materializeLinearIssue,
 } from "./linear.js";
+import type { ProviderName } from "./models.js";
 import { uiStore } from "./ui/store.js";
 
 const POLL_INTERVAL_MS = 2_000;
@@ -50,6 +51,7 @@ export class KaiBot {
   private linearStartedStateId: string | null = null;
   private linearCompletedStateId: string | null = null;
   private model: string;
+  private provider: ProviderName;
 
   /** Timestamp (ms) when each feature file was first seen — used to enforce a
    *  minimum 2-second settle delay before processing begins. */
@@ -57,10 +59,11 @@ export class KaiBot {
 
   private running = false;
 
-  constructor(projectDir: string, model = "claude-opus-4-6", useLinear = false) {
+  constructor(projectDir: string, model = "claude-opus-4-6", useLinear = false, provider: ProviderName = "anthropic") {
     this.projectDir = projectDir;
     this.featuresDir = join(projectDir, "features");
     this.model = model;
+    this.provider = provider;
 
     if (useLinear) {
       const linearCfg = getLinearConfigFromEnv();
@@ -88,12 +91,18 @@ export class KaiBot {
 
     uiStore.setProjectDir(this.projectDir);
     uiStore.setModel(this.model);
+    uiStore.setProvider(this.provider);
     uiStore.setStatus("watching");
     uiStore.setStatusMessage(this.getWatchingMessage());
 
     // Listen for runtime model changes from the UI
     uiStore.on("model-changed", (newModel: string) => {
       this.model = newModel;
+    });
+
+    // Listen for runtime provider changes from the UI
+    uiStore.on("provider-changed", (newProvider: string) => {
+      this.provider = newProvider as ProviderName;
     });
 
     while (this.running) {
@@ -187,6 +196,7 @@ export class KaiBot {
       }
 
       const stats = await processFeature(feature, this.projectDir, this.model, {
+        provider: this.provider,
         onPlanCreated: async (planSection: string) => {
           if (!this.linearClient) return;
           const comment = buildLinearPlanComment(issueIdentifier, planSection);
@@ -350,7 +360,7 @@ export class KaiBot {
       // Prepend Feature ID to the file content
       this.prependFeatureId(feature.filePath, featureId);
 
-      const stats = await processFeature(feature, this.projectDir, this.model);
+      const stats = await processFeature(feature, this.projectDir, this.model, { provider: this.provider });
 
       feature = markComplete(feature);
       feature.featureId = featureId;

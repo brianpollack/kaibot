@@ -10,7 +10,7 @@ import {
   uiStore,
 } from "./store.js";
 import { reviewAndWriteFeature } from "../feature_creator.js";
-import { MODELS } from "../models.js";
+import { getAvailableProviders, getModelsForProvider, type ProviderName } from "../models.js";
 import { runTechDebtScan } from "../tech_debt.js";
 
 // ---------------------------------------------------------------------------
@@ -467,6 +467,10 @@ function HotkeyBar({
             </Text>
             <Text dimColor>{" Model  "}</Text>
             <Text color="cyan" bold>
+              {"[P]"}
+            </Text>
+            <Text dimColor>{" Provider  "}</Text>
+            <Text color="cyan" bold>
               {"[Q]"}
             </Text>
             <Text dimColor>{" Quit"}</Text>
@@ -603,12 +607,14 @@ function FeatureInput({ lines, cols }: { lines: string[]; cols: number }): React
 
 function ModelSelector({
   currentModel,
+  currentProvider,
   cols,
 }: {
   currentModel: string;
+  currentProvider: string;
   cols: number;
 }): React.JSX.Element {
-  const models = MODELS;
+  const models = getModelsForProvider(currentProvider as ProviderName);
   const initialIndex = Math.max(
     models.findIndex((m) => m.id === currentModel),
     0,
@@ -692,6 +698,100 @@ function ModelSelector({
 }
 
 // ---------------------------------------------------------------------------
+// Provider Selector — arrow/j/k navigation, Enter to confirm, Escape to cancel
+// ---------------------------------------------------------------------------
+
+function ProviderSelector({
+  currentProvider,
+  cols,
+}: {
+  currentProvider: string;
+  cols: number;
+}): React.JSX.Element {
+  const providers = getAvailableProviders();
+  const initialIndex = Math.max(
+    providers.findIndex((p) => p.id === currentProvider),
+    0,
+  );
+  const [selectedIndex, setSelectedIndex] = useState(initialIndex);
+
+  const handleInput = useCallback(
+    (
+      input: string,
+      key: {
+        upArrow?: boolean;
+        downArrow?: boolean;
+        return?: boolean;
+        escape?: boolean;
+      },
+    ) => {
+      if (key.escape) {
+        uiStore.finishProviderSelection();
+        return;
+      }
+
+      if (key.return) {
+        const chosen = providers[selectedIndex];
+        if (chosen.id !== currentProvider) {
+          uiStore.selectProvider(chosen.id);
+          uiStore.setFlashMessage(`Provider changed to ${chosen.label}`);
+          setTimeout(() => uiStore.clearFlashMessage(), 3000);
+        } else {
+          uiStore.finishProviderSelection();
+        }
+        return;
+      }
+
+      if (key.upArrow || input.toLowerCase() === "k") {
+        setSelectedIndex((i) => (i > 0 ? i - 1 : providers.length - 1));
+        return;
+      }
+
+      if (key.downArrow || input.toLowerCase() === "j") {
+        setSelectedIndex((i) => (i < providers.length - 1 ? i + 1 : 0));
+        return;
+      }
+    },
+    [selectedIndex, currentProvider, providers],
+  );
+
+  useInput(handleInput, { isActive: true });
+
+  const dividerWidth = Math.max(cols, 40);
+
+  return (
+    <Box flexDirection="column" paddingX={1}>
+      <Text bold color="cyan">
+        {"🔌 Select Provider (↑/↓ or J/K to navigate, Enter to confirm, Esc to cancel):"}
+      </Text>
+      <Text dimColor>{"─".repeat(dividerWidth)}</Text>
+      {providers.map((provider, i) => {
+        const isSelected = i === selectedIndex;
+        const isCurrent = provider.id === currentProvider;
+        return (
+          <Box key={provider.id}>
+            <Text color={isSelected ? "cyan" : "white"} bold={isSelected}>
+              {isSelected ? "  ▸ " : "    "}
+            </Text>
+            <Text color={isSelected ? "cyan" : "white"} bold={isSelected}>
+              {provider.label}
+            </Text>
+            <Text dimColor>{" — " + provider.description}</Text>
+            {isCurrent && (
+              <Text color="green" bold>
+                {" (active)"}
+              </Text>
+            )}
+          </Box>
+        );
+      })}
+      <Box height={1} />
+      <Text dimColor>{"  Press Enter to select, Escape to cancel"}</Text>
+    </Box>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main App
 // ---------------------------------------------------------------------------
 
@@ -721,6 +821,7 @@ export function App(): React.JSX.Element {
     state.status === "watching" &&
     !state.hotkeyInputActive &&
     !state.isSelectingModel &&
+    !state.isSelectingProvider &&
     !state.featureReviewActive &&
     !state.isScanningTechDebt &&
     !state.commitPrompt.visible;
@@ -742,6 +843,17 @@ export function App(): React.JSX.Element {
       if (input.toLowerCase() === "m") {
         uiStore.clearFlashMessage();
         uiStore.startModelSelection();
+      }
+
+      if (input.toLowerCase() === "p") {
+        const available = getAvailableProviders();
+        if (available.length > 1) {
+          uiStore.clearFlashMessage();
+          uiStore.startProviderSelection();
+        } else {
+          uiStore.setFlashMessage("No alternate providers available (set OPENROUTER_API_KEY)");
+          setTimeout(() => uiStore.clearFlashMessage(), 3000);
+        }
       }
 
       if (input.toLowerCase() === "s") {
@@ -773,6 +885,23 @@ export function App(): React.JSX.Element {
   const leftCols = Math.floor(cols * 0.6);
   const rightCols = cols - leftCols;
 
+  // When provider selector is active, show the provider selection overlay.
+  if (state.isSelectingProvider) {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Header
+          status={state.status}
+          projectDir={state.projectDir}
+          model={state.model}
+          featureName={state.featureName}
+          featureStage={state.featureStage}
+          cols={cols}
+        />
+        <ProviderSelector currentProvider={state.provider} cols={cols} />
+      </Box>
+    );
+  }
+
   // When model selector is active, show the model selection overlay.
   if (state.isSelectingModel) {
     return (
@@ -785,7 +914,7 @@ export function App(): React.JSX.Element {
           featureStage={state.featureStage}
           cols={cols}
         />
-        <ModelSelector currentModel={state.model} cols={cols} />
+        <ModelSelector currentModel={state.model} currentProvider={state.provider} cols={cols} />
       </Box>
     );
   }

@@ -19,7 +19,8 @@
     "format": "prettier --write src",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:real": "tsx src/kai_test_real.ts"
+    "test:real": "tsx src/kai_test_real.ts",
+    "testOpenrouter": "tsx src/kai_bot.ts testOpenrouter"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.72",

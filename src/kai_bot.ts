@@ -4,7 +4,7 @@ import { resolve } from "path";
 import { loadProjectEnv } from "./env.js";
 import { KaiBot } from "./KaiBot.js";
 import { createFeature } from "./feature_creator.js";
-import { printModels } from "./models.js";
+import { printModels, type ProviderName } from "./models.js";
 import { loadSettings, saveSettings } from "./settings.js";
 import { mountUI, unmountUI } from "./ui/render.js";
 import { uiStore } from "./ui/store.js";
@@ -18,6 +18,22 @@ const subcommand = process.argv[2];
 
 if (subcommand === "models") {
   await printModels();
+  process.exit(0);
+}
+
+if (subcommand === "testOpenrouter") {
+  // Load .env from current directory
+  const { loadProjectEnv: loadEnv } = await import("./env.js");
+  loadEnv(resolve("."));
+
+  if (!process.env.OPENROUTER_API_KEY) {
+    console.error("Error: OPENROUTER_API_KEY environment variable is not set.");
+    console.error("Set it in your project's .env file or export it in your shell.");
+    process.exit(1);
+  }
+
+  console.log("OpenRouter API key detected. Fetching available models…\n");
+  await printModels("openrouter");
   process.exit(0);
 }
 
@@ -83,12 +99,13 @@ if (!process.env.ANTHROPIC_API_KEY) {
 
 const savedSettings = loadSettings(resolvedDir);
 const model = process.env.KAI_MODEL ?? savedSettings.model ?? "claude-opus-4-6";
+const provider: ProviderName = (savedSettings.provider as ProviderName) ?? "anthropic";
 
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 
-const bot = new KaiBot(resolvedDir, model, useLinear);
+const bot = new KaiBot(resolvedDir, model, useLinear, provider);
 
 // Mount the Ink UI
 mountUI();
@@ -114,6 +131,11 @@ webServer.start().then(() => {
 uiStore.on("model-changed", (newModel: string) => {
   webServer.model = newModel;
   saveSettings(resolvedDir, { ...loadSettings(resolvedDir), model: newModel });
+});
+
+// Keep provider in sync with UI provider changes; persist to settings file
+uiStore.on("provider-changed", (newProvider: string) => {
+  saveSettings(resolvedDir, { ...loadSettings(resolvedDir), provider: newProvider });
 });
 
 const shutdown = () => {

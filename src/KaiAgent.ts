@@ -5,6 +5,7 @@ import type { SDKAssistantMessage, SDKResultMessage } from "@anthropic-ai/claude
 
 import { type Feature } from "./feature.js";
 import { KaiClient } from "./KaiClient.js";
+import type { ProviderName } from "./models.js";
 import { type PlanLine, uiStore } from "./ui/store.js";
 
 // ---------------------------------------------------------------------------
@@ -25,6 +26,7 @@ export interface AgentStats {
 
 export interface ProcessFeatureOptions {
   onPlanCreated?: (planSection: string) => Promise<void> | void;
+  provider?: ProviderName;
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +84,7 @@ export async function processFeature(
   model: string,
   options: ProcessFeatureOptions = {},
 ): Promise<AgentStats> {
-  const client = KaiClient.create(projectDir, model);
+  const client = KaiClient.create(projectDir, model, options.provider);
   const prompt = buildPrompt(feature, projectDir);
   const startTime = Date.now();
 

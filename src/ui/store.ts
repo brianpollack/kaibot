@@ -124,6 +124,12 @@ export interface UIState {
   /** Whether the model selector overlay is currently open. */
   isSelectingModel: boolean;
 
+  // Provider selector
+  /** The current provider name (e.g. "anthropic", "openrouter"). */
+  provider: string;
+  /** Whether the provider selector overlay is currently open. */
+  isSelectingProvider: boolean;
+
   // Tech debt scan
   /** Whether a tech debt scan is currently running. */
   isScanningTechDebt: boolean;
@@ -167,6 +173,8 @@ class UIStore extends EventEmitter {
     featureReviewActive: false,
     flashMessage: "",
     isSelectingModel: false,
+    provider: "anthropic",
+    isSelectingProvider: false,
     isScanningTechDebt: false,
     statusMessage: "",
   };
@@ -493,6 +501,34 @@ class UIStore extends EventEmitter {
     this.emit("model-changed", model);
   }
 
+  // -- Provider selector -----------------------------------------------------
+
+  /** Set the current provider (e.g. on startup). */
+  setProvider(provider: string): void {
+    this.state.provider = provider;
+    this.emitChange();
+  }
+
+  /** Open the provider selector overlay. */
+  startProviderSelection(): void {
+    this.state.isSelectingProvider = true;
+    this.emitChange();
+  }
+
+  /** Close the provider selector overlay. */
+  finishProviderSelection(): void {
+    this.state.isSelectingProvider = false;
+    this.emitChange();
+  }
+
+  /** Select a new provider: update state, close overlay, and notify listeners. */
+  selectProvider(provider: string): void {
+    this.state.provider = provider;
+    this.state.isSelectingProvider = false;
+    this.emitChange();
+    this.emit("provider-changed", provider);
+  }
+
   // -- Tech debt scan -------------------------------------------------------
 
   /** Mark that a tech debt scan is in progress. */
@@ -531,6 +567,7 @@ class UIStore extends EventEmitter {
     this.state.featureReviewActive = false;
     this.state.flashMessage = "";
     this.state.isSelectingModel = false;
+    this.state.isSelectingProvider = false;
     this.state.isScanningTechDebt = false;
     this.state.statusMessage = "";
     this.emitChange();

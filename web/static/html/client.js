@@ -14,6 +14,7 @@ let state = {
   status: "idle",
   projectDir: "",
   model: "",
+  provider: "anthropic",
   featureName: null,
   featureStage: null,
   featureStartTime: null,
@@ -301,6 +302,8 @@ function updateDOM() {
   }
   if ($projectDir) $projectDir.textContent = state.projectDir;
   if ($currentModel) $currentModel.textContent = state.model;
+  var $currentProvider = document.getElementById("current-provider");
+  if ($currentProvider) $currentProvider.textContent = state.provider === "openrouter" ? "OpenRouter" : "Anthropic";
   if ($todaySpend) $todaySpend.textContent = "$" + (state.todaySpend || 0).toFixed(2);
   if ($statusMsg) $statusMsg.textContent = state.statusMessage || " ";
 
@@ -644,6 +647,62 @@ function openModelSelector() {
 }
 
 // ---------------------------------------------------------------------------
+// Provider Selector
+// ---------------------------------------------------------------------------
+
+var cachedProviders = null;
+
+function openProviderSelector() {
+  if (activePopup) return;
+
+  var trigger = document.getElementById("provider-trigger");
+
+  function showWithProviders(providers) {
+    var items = providers.map(function (p) {
+      return {
+        id: p.id,
+        label: p.label,
+        description: p.description,
+        active: p.id === state.provider,
+      };
+    });
+
+    showPopupMenu({
+      items: items,
+      anchorEl: trigger,
+      onSelect: function (item) {
+        if (item.id !== state.provider && ws && ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: "select-provider", provider: item.id }));
+          // Clear cached models so they refresh for the new provider
+          cachedModels = null;
+        }
+      },
+      onClose: function () {
+        if (trigger) trigger.setAttribute("aria-expanded", "false");
+      },
+    });
+
+    if (trigger) trigger.setAttribute("aria-expanded", "true");
+  }
+
+  if (cachedProviders) {
+    showWithProviders(cachedProviders);
+  } else {
+    fetch("/api/providers")
+      .then(function (res) { return res.json(); })
+      .then(function (providers) {
+        cachedProviders = providers;
+        showWithProviders(providers);
+      })
+      .catch(function () {
+        showWithProviders([
+          { id: "anthropic", label: "Anthropic", description: "Direct Anthropic API" },
+        ]);
+      });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // View switching — Dashboard vs Features
 // ---------------------------------------------------------------------------
 
@@ -929,6 +988,10 @@ document.addEventListener("keydown", function (e) {
       e.preventDefault();
       openModelSelector();
       break;
+    case "p":
+      e.preventDefault();
+      openProviderSelector();
+      break;
   }
 });
 
@@ -937,6 +1000,12 @@ document.addEventListener("click", function (e) {
   if (trigger && trigger.contains(e.target)) {
     e.preventDefault();
     openModelSelector();
+  }
+
+  var providerTrigger = document.getElementById("provider-trigger");
+  if (providerTrigger && providerTrigger.contains(e.target)) {
+    e.preventDefault();
+    openProviderSelector();
   }
 
   var navDash = document.getElementById("nav-dashboard");

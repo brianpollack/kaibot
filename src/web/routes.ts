@@ -6,7 +6,8 @@ import { fileURLToPath } from "url";
 import { renderMainPage } from "./templates.js";
 import { getWebState } from "./wsHandler.js";
 import type { WebServer } from "./WebServer.js";
-import { MODELS } from "../models.js";
+import { getAvailableProviders, getModelsForProvider, type ProviderName } from "../models.js";
+import { uiStore } from "../ui/store.js";
 import { generateFeatureId } from "../feature.js";
 
 // ---------------------------------------------------------------------------
@@ -93,10 +94,19 @@ export function handleRequest(
     return;
   }
 
-  // ── API: available models ──────────────────────────────────────────
+  // ── API: available models (returns models for the current provider) ─
   if (pathname === "/api/models") {
+    const provider = uiStore.getState().provider as ProviderName;
+    const models = getModelsForProvider(provider);
     res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
-    res.end(JSON.stringify(MODELS));
+    res.end(JSON.stringify(models));
+    return;
+  }
+
+  // ── API: available providers ─────────────────────────────────────────
+  if (pathname === "/api/providers") {
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+    res.end(JSON.stringify(getAvailableProviders()));
     return;
   }
 
