@@ -73,3 +73,6 @@ Implemented the missing streaming status panels for the KaiBot Web UI dashboard.
 March 24th, 2026: main: brian
 Added duplicate filename protection to the feature state machine. The new exported `deconflictPath` helper checks whether a target path already exists before any move; if it does, it appends the feature's unique ID to the stem (`dupename-<id>.md`). This deconfliction is applied in `markInProgress`, `markComplete`, and `markHold` — the returned `Feature` object reflects the updated `name` and `filePath` so subsequent transitions chain correctly. Covered by 7 new tests in `feature.test.ts` (3 for `deconflictPath` directly, 1 collision test per transition function).
 
+March 24th, 2026: main: brian
+Fixed the Web UI dashboard panels (Thinking, Commands, File Operations, Plan, Feature Status) showing blank content by replacing the broken `dockLayout.updateTab(id, null, true)` re-render mechanism with a proper event-driven approach. A global `panelBus` EventTarget is now used: `updateDOM()` dispatches a `"state-change"` event whenever new WebSocket data arrives, and each `PanelWrapper` React component subscribes to this event and calls `forceUpdate()` to re-render its HTML content. The previous approach failed because rc-dock's `updateTab` with `null` tab data does not trigger React component re-renders.
+

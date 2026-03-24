@@ -1,0 +1,36 @@
+{
+  "id": "CjTHaYWs",
+  "requestedAt": "2026-03-24T14:49:40.855Z",
+  "completedAt": "2026-03-24T14:53:10.399Z",
+  "executionTimeMs": 147860,
+  "model": "claude-sonnet-4-6",
+  "tokensIn": 22,
+  "tokensOut": 8604,
+  "cacheReadTokens": 571445,
+  "cacheWriteTokens": 36371,
+  "totalCostUsd": 0.43695075,
+  "numTurns": 21,
+  "filesChanged": [
+    "CHANGELOG.md",
+    "features/complete/dupename.md",
+    "src/__tests__/feature.test.ts",
+    "src/feature.ts"
+  ],
+  "testsAdded": [
+    "src/__tests__/feature.test.ts"
+  ],
+  "gitBranch": "main",
+  "gitCommitHash": "5aa1b7b83ff006f58fb899108848c26a1c3265f1",
+  "description": "If a feature added the the features folder duplicates the filename in inprogress or complete append the unique ID to the filename like \"dupename-<unique id>.md\" to avoid overwriting historical feature files.",
+  "planPoints": [
+    "1. Add `deconflictPath` helper in `feature.ts` that appends featureId to filename when target already exists — added exported helper using `existsSync`; falls back to `name-<id>.md` on collision",
+    "2. Apply deconfliction in `markInProgress`, `markComplete`, and `markHold` — all three transition functions now use `deconflictPath`; returned Feature reflects updated `name` and `filePath`",
+    "3. Add tests for the duplicate-name collision behavior in `feature.test.ts` — added `deconflictPath` unit tests plus collision tests for all three transition functions (30 tests, all pass)"
+  ],
+  "source": "file",
+  "linearIssueId": null,
+  "linearIdentifier": null,
+  "status": "success",
+  "errorMessage": null,
+  "summary": "A `deconflictPath` helper was added to prevent filename collisions when feature files transition between states; if the target path exists, the feature's unique ID is appended to the filename stem (e.g., `dupename-<id>.md`). This deconfliction is applied in `markInProgress`, `markComplete`, and `markHold`, each returning an updated `Feature` with the new name and path to support chaining of subsequent transitions. The implementation includes 7 new test cases in `feature.test.ts`."
+}

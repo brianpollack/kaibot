@@ -261,19 +261,35 @@ function loadTab(tabData) {
   };
 }
 
+/**
+ * Global event target used to notify PanelWrapper instances that state has
+ * changed and they should re-render.  Dispatched from updateDOM().
+ */
+var panelBus = new EventTarget();
+
 /** Simple React component wrapper that renders HTML content and re-renders on state changes. */
 class PanelWrapper extends React.Component {
   constructor(props) {
     super(props);
     this._ref = React.createRef();
+    this._onStateChange = this._onStateChange.bind(this);
   }
 
   componentDidMount() {
+    panelBus.addEventListener("state-change", this._onStateChange);
     this._update();
+  }
+
+  componentWillUnmount() {
+    panelBus.removeEventListener("state-change", this._onStateChange);
   }
 
   componentDidUpdate() {
     this._update();
+  }
+
+  _onStateChange() {
+    this.forceUpdate();
   }
 
   _update() {
@@ -392,16 +408,8 @@ function updateDOM() {
   // Status message
   if ($statusMsg) $statusMsg.textContent = state.statusMessage || " ";
 
-  // Force rc-dock panels to re-render
-  if (dockLayout) {
-    // Touch each panel to trigger React re-render
-    ["feature-status", "thinking", "commands", "fileops", "plan"].forEach(function (id) {
-      const tab = dockLayout.find(id);
-      if (tab) {
-        dockLayout.updateTab(id, null, true);
-      }
-    });
-  }
+  // Notify all PanelWrapper instances that state has changed so they re-render
+  panelBus.dispatchEvent(new Event("state-change"));
 }
 
 // ---------------------------------------------------------------------------

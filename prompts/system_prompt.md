@@ -109,3 +109,7 @@ The following applies to front end design (UI, Web UI, etc)
 ## Final Rule
 
 Write code that a senior engineer would confidently approve in a production code review.
+
+MUST Read CLAUDE.md for additional projects notes and instructions
+MUST Read README.md for additional documentation on the project in the folder
+MUST Update README.md at the end of changes with short critical information that might be needed in the future.
