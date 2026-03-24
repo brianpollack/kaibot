@@ -94,3 +94,6 @@ Added AI-powered feature title generation using the Claude Agent SDK. When a new
 March 24th, 2026: main: brian
 Implemented a New Feature dialog popup in the KaiBot web UI. Pressing **N** or clicking the "New Feature" nav item opens a modal dialog with:
 
+March 24th, 2026: main: brian
+Added a CSS media query (`@media (min-width: 1400px)`) at the end of `web/static/css/main.css` that doubles the new feature dialog size on large screens:
+

@@ -1160,3 +1160,14 @@ ul { list-style: none; }
 .dialog-btn-secondary:hover:not(:disabled) {
   background: #374357;
 }
+
+/* Large-screen override: double the dialog size when viewport is wide enough */
+@media (min-width: 1400px) {
+  .dialog-box {
+    width: 1120px;
+  }
+
+  .dialog-textarea {
+    min-height: 360px;
+  }
+}
