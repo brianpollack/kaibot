@@ -197,6 +197,41 @@ export function renderMainPage(server: WebServer): string {
     <span id="status-message" aria-live="polite">Connecting…</span>
   </footer>
 
+  <!-- ── New Feature Dialog ──────────────────────────────────────────── -->
+  <div id="new-feature-overlay" class="dialog-overlay" style="display:none"
+       role="dialog" aria-modal="true" aria-labelledby="nf-dialog-title">
+    <div class="dialog-box">
+      <div class="dialog-header">
+        <h2 id="nf-dialog-title">&#x2728; New Feature</h2>
+        <button class="dialog-close" id="nf-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="dialog-body">
+        <label class="dialog-label" for="nf-title">Title</label>
+        <input type="text" id="nf-title" class="dialog-input"
+               placeholder="Feature title…" autocomplete="off" />
+
+        <label class="dialog-label" for="nf-description">Description</label>
+        <div class="md-toolbar">
+          <button type="button" class="md-btn" data-md="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+          <button type="button" class="md-btn" data-md="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+          <button type="button" class="md-btn" data-md="heading" title="Heading">#</button>
+          <button type="button" class="md-btn" data-md="ul" title="Bullet list">•</button>
+          <button type="button" class="md-btn" data-md="ol" title="Numbered list">1.</button>
+          <button type="button" class="md-btn" data-md="code" title="Code">&lt;/&gt;</button>
+          <button type="button" class="md-btn" data-md="link" title="Link">&#x1F517;</button>
+        </div>
+        <textarea id="nf-description" class="dialog-textarea"
+                  placeholder="Describe the feature in Markdown…" rows="12"></textarea>
+
+        <div id="nf-error" class="dialog-error" style="display:none"></div>
+      </div>
+      <div class="dialog-footer">
+        <button class="dialog-btn dialog-btn-secondary" id="nf-hold">Hold</button>
+        <button class="dialog-btn dialog-btn-primary" id="nf-save">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Client-side JavaScript (no external CDN dependencies) -->
   <script src="/static/html/client.js"></script>
 

@@ -95,6 +95,25 @@ function renderConversationContent() {
         );
       }
 
+      case "agent": {
+        var agentType = item.agentType || "Agent";
+        var agentDesc = item.agentDescription || "";
+        return (
+          '<div class="conv-agent">' +
+            '<div class="conv-agent-header">' +
+              '<img class="conv-agent-favicon" src="https://claude.ai/favicon.ico"' +
+                ' alt="Claude" onerror="this.style.display=\'none\'">' +
+              '<span class="conv-agent-type">' + escHtml(agentType) + "</span>" +
+              (agentDesc
+                ? '<span class="conv-agent-sep"> — </span>' +
+                  '<span class="conv-agent-desc">' + escHtml(agentDesc) + "</span>"
+                : "") +
+            "</div>" +
+            '<pre class="conv-agent-prompt">' + escHtml(item.content) + "</pre>" +
+          "</div>"
+        );
+      }
+
       case "git":
         return (
           '<div class="conv-git">' +
@@ -733,11 +752,163 @@ function loadFeaturesData() {
 }
 
 // ---------------------------------------------------------------------------
+// New Feature Dialog
+// ---------------------------------------------------------------------------
+
+var newFeatureDialogOpen = false;
+
+function openNewFeatureDialog() {
+  var overlay = document.getElementById("new-feature-overlay");
+  if (!overlay || newFeatureDialogOpen) return;
+
+  newFeatureDialogOpen = true;
+  overlay.style.display = "";
+
+  var titleInput = document.getElementById("nf-title");
+  var descInput = document.getElementById("nf-description");
+  var errorEl = document.getElementById("nf-error");
+
+  // Reset fields
+  if (titleInput) titleInput.value = "";
+  if (descInput) descInput.value = "";
+  if (errorEl) { errorEl.style.display = "none"; errorEl.textContent = ""; }
+
+  // Focus the title input
+  if (titleInput) setTimeout(function () { titleInput.focus(); }, 50);
+}
+
+function closeNewFeatureDialog() {
+  var overlay = document.getElementById("new-feature-overlay");
+  if (overlay) overlay.style.display = "none";
+  newFeatureDialogOpen = false;
+}
+
+function submitNewFeature(hold) {
+  var titleInput = document.getElementById("nf-title");
+  var descInput = document.getElementById("nf-description");
+  var errorEl = document.getElementById("nf-error");
+  var saveBtn = document.getElementById("nf-save");
+  var holdBtn = document.getElementById("nf-hold");
+
+  var title = titleInput ? titleInput.value.trim() : "";
+  var description = descInput ? descInput.value.trim() : "";
+
+  if (!title) {
+    if (errorEl) {
+      errorEl.textContent = "Title is required.";
+      errorEl.style.display = "";
+    }
+    if (titleInput) titleInput.focus();
+    return;
+  }
+
+  // Disable buttons during submission
+  if (saveBtn) saveBtn.disabled = true;
+  if (holdBtn) holdBtn.disabled = true;
+  if (errorEl) errorEl.style.display = "none";
+
+  fetch("/api/features", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: title, description: description, hold: !!hold }),
+  })
+    .then(function (res) {
+      if (!res.ok) {
+        return res.json().then(function (data) {
+          throw new Error(data.error || "Failed to create feature");
+        });
+      }
+      return res.json();
+    })
+    .then(function () {
+      closeNewFeatureDialog();
+      // If we're on the features view, refresh the list
+      if (currentView === "features") {
+        loadFeaturesData();
+      }
+    })
+    .catch(function (err) {
+      if (errorEl) {
+        errorEl.textContent = err.message || "Failed to create feature";
+        errorEl.style.display = "";
+      }
+    })
+    .finally(function () {
+      if (saveBtn) saveBtn.disabled = false;
+      if (holdBtn) holdBtn.disabled = false;
+    });
+}
+
+// Markdown toolbar actions
+function applyMarkdownAction(textarea, action) {
+  if (!textarea) return;
+
+  var start = textarea.selectionStart;
+  var end = textarea.selectionEnd;
+  var text = textarea.value;
+  var selected = text.slice(start, end);
+  var before = text.slice(0, start);
+  var after = text.slice(end);
+  var replacement = "";
+  var cursorOffset = 0;
+
+  switch (action) {
+    case "bold":
+      replacement = "**" + (selected || "bold text") + "**";
+      cursorOffset = selected ? replacement.length : 2;
+      break;
+    case "italic":
+      replacement = "_" + (selected || "italic text") + "_";
+      cursorOffset = selected ? replacement.length : 1;
+      break;
+    case "heading":
+      replacement = "## " + (selected || "Heading");
+      cursorOffset = selected ? replacement.length : 3;
+      break;
+    case "ul":
+      replacement = "- " + (selected || "List item");
+      cursorOffset = selected ? replacement.length : 2;
+      break;
+    case "ol":
+      replacement = "1. " + (selected || "List item");
+      cursorOffset = selected ? replacement.length : 3;
+      break;
+    case "code":
+      if (selected && selected.indexOf("\n") >= 0) {
+        replacement = "```\n" + selected + "\n```";
+      } else {
+        replacement = "`" + (selected || "code") + "`";
+      }
+      cursorOffset = selected ? replacement.length : 1;
+      break;
+    case "link":
+      replacement = "[" + (selected || "link text") + "](url)";
+      cursorOffset = selected ? replacement.length - 4 : 1;
+      break;
+    default:
+      return;
+  }
+
+  textarea.value = before + replacement + after;
+  textarea.focus();
+  var newPos = start + cursorOffset;
+  textarea.setSelectionRange(newPos, newPos);
+}
+
+// ---------------------------------------------------------------------------
 // Keyboard shortcuts
 // ---------------------------------------------------------------------------
 
 document.addEventListener("keydown", function (e) {
+  // Close new feature dialog on Escape
+  if (newFeatureDialogOpen && e.key === "Escape") {
+    e.preventDefault();
+    closeNewFeatureDialog();
+    return;
+  }
+
   if (activePopup) return;
+  if (newFeatureDialogOpen) return;
   if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 
@@ -750,12 +921,10 @@ document.addEventListener("keydown", function (e) {
       e.preventDefault();
       showFeaturesView();
       break;
-    case "n": {
+    case "n":
       e.preventDefault();
-      var navFeature = document.getElementById("nav-feature");
-      if (navFeature) navFeature.click();
+      openNewFeatureDialog();
       break;
-    }
     case "m":
       e.preventDefault();
       openModelSelector();
@@ -780,6 +949,47 @@ document.addEventListener("click", function (e) {
   if (navFeatures && navFeatures.contains(e.target)) {
     e.preventDefault();
     showFeaturesView();
+  }
+
+  // New Feature nav item
+  var navFeature = document.getElementById("nav-feature");
+  if (navFeature && navFeature.contains(e.target)) {
+    e.preventDefault();
+    openNewFeatureDialog();
+  }
+
+  // New Feature dialog — close button
+  var nfClose = document.getElementById("nf-close");
+  if (nfClose && nfClose.contains(e.target)) {
+    closeNewFeatureDialog();
+  }
+
+  // New Feature dialog — overlay click to close
+  var nfOverlay = document.getElementById("new-feature-overlay");
+  if (nfOverlay && e.target === nfOverlay) {
+    closeNewFeatureDialog();
+  }
+
+  // New Feature dialog — Save button
+  var nfSave = document.getElementById("nf-save");
+  if (nfSave && nfSave.contains(e.target)) {
+    submitNewFeature(false);
+  }
+
+  // New Feature dialog — Hold button
+  var nfHold = document.getElementById("nf-hold");
+  if (nfHold && nfHold.contains(e.target)) {
+    submitNewFeature(true);
+  }
+
+  // Markdown toolbar buttons
+  var mdBtn = e.target.closest ? e.target.closest(".md-btn") : null;
+  if (mdBtn) {
+    var action = mdBtn.getAttribute("data-md");
+    var textarea = document.getElementById("nf-description");
+    if (action && textarea) {
+      applyMarkdownAction(textarea, action);
+    }
   }
 });
 

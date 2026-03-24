@@ -42,7 +42,7 @@ export interface PlanLine {
   text: string;
 }
 
-export type ConversationItemType = "thinking" | "command" | "git" | "system";
+export type ConversationItemType = "thinking" | "command" | "agent" | "git" | "system";
 
 export interface ConversationItem {
   type: ConversationItemType;
@@ -51,6 +51,10 @@ export interface ConversationItem {
   active?: boolean;
   /** Unix ms timestamp — used to coalesce rapid commands into one block. */
   timestamp?: number;
+  /** For "agent" items: the subagent type (e.g. "Explore", "Plan"). */
+  agentType?: string;
+  /** For "agent" items: the short description passed to the subagent. */
+  agentDescription?: string;
 }
 
 export interface UIState {
@@ -308,6 +312,29 @@ class UIStore extends EventEmitter {
       if (item.type === "command" && item.active) item.active = false;
     }
     items.push({ type: "command", content: command, active: true, timestamp: now });
+    if (items.length > MAX_CONVERSATION_ITEMS) {
+      this.state.conversationItems = items.slice(-MAX_CONVERSATION_ITEMS);
+    }
+    this.emitChange();
+  }
+
+  /**
+   * Append an Agent tool-use block to the conversation.
+   * Rendered as a distinct yellow-tinted panel with the Claude favicon.
+   */
+  pushConversationAgent(agentType: string, description: string, prompt: string): void {
+    const items = this.state.conversationItems;
+    // Close any active command before the agent block
+    for (const item of items) {
+      if (item.type === "command" && item.active) item.active = false;
+    }
+    items.push({
+      type: "agent" as const,
+      content: prompt,
+      agentType,
+      agentDescription: description,
+      timestamp: Date.now(),
+    });
     if (items.length > MAX_CONVERSATION_ITEMS) {
       this.state.conversationItems = items.slice(-MAX_CONVERSATION_ITEMS);
     }

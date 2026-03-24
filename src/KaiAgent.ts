@@ -204,6 +204,17 @@ function routeToolUse(name: string, input: Record<string, unknown> | undefined):
     const opType = name.toLowerCase() as "read" | "write" | "edit";
     const preview = getFileOpPreview(name, input);
     uiStore.pushFileOp({ type: opType, path: basename(filePath), preview });
+  } else if (name === "Agent") {
+    const subagentType =
+      typeof input?.subagent_type === "string" ? input.subagent_type : "unknown";
+    const description =
+      typeof input?.description === "string" ? input.description : "";
+    const prompt =
+      typeof input?.prompt === "string" ? input.prompt : "";
+    // Compact label for the InkJS commands panel
+    uiStore.pushCommand(`Agent(${subagentType}): ${description}`);
+    // Rich agent block for the web conversation feed
+    uiStore.pushConversationAgent(subagentType, description, prompt);
   } else {
     // Other tools (Glob, Grep, etc.) — truncate only for the narrow InkJS panel
     const inputStr = JSON.stringify(input);

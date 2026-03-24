@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { type IncomingMessage, type ServerResponse } from "http";
 import { extname, join, resolve } from "path";
 import { fileURLToPath } from "url";
@@ -7,6 +7,7 @@ import { renderMainPage } from "./templates.js";
 import { getWebState } from "./wsHandler.js";
 import type { WebServer } from "./WebServer.js";
 import { MODELS } from "../models.js";
+import { generateFeatureId } from "../feature.js";
 
 // ---------------------------------------------------------------------------
 // MIME types
@@ -80,9 +81,43 @@ export function handleRequest(
   }
 
   // ── API: features list (pending + complete) ────────────────────────
-  if (pathname === "/api/features") {
+  if (pathname === "/api/features" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(getFeaturesList(server.projectDir)));
+    return;
+  }
+
+  // ── API: create new feature ───────────────────────────────────────
+  if (pathname === "/api/features" && req.method === "POST") {
+    readBody(req)
+      .then((body) => {
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const title = String(data["title"] ?? "").trim();
+        const description = String(data["description"] ?? "").trim();
+        const hold = Boolean(data["hold"]);
+
+        if (!title) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Title is required" }));
+          return;
+        }
+
+        const featureId = generateFeatureId();
+        const featuresDir = join(server.projectDir, "features");
+        const targetDir = hold ? join(featuresDir, "hold") : featuresDir;
+        mkdirSync(targetDir, { recursive: true });
+
+        const content = `Feature ID: ${featureId}\n\n${description}`;
+        const filePath = join(targetDir, `${featureId}.md`);
+        writeFileSync(filePath, content, "utf-8");
+
+        res.writeHead(201, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ id: featureId, title, hold, filePath: filePath }));
+      })
+      .catch(() => {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid request body" }));
+      });
     return;
   }
 
@@ -219,6 +254,19 @@ function getFeaturesList(projectDir: string): FeaturesList {
   });
 
   return { pending, complete };
+}
+
+// ---------------------------------------------------------------------------
+// Request body helper
+// ---------------------------------------------------------------------------
+
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    req.on("error", reject);
+  });
 }
 
 // ---------------------------------------------------------------------------
