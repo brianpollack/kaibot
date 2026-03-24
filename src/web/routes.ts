@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { renderMainPage } from "./templates.js";
 import { getWebState } from "./wsHandler.js";
 import type { WebServer } from "./WebServer.js";
+import { MODELS } from "../models.js";
 
 // ---------------------------------------------------------------------------
 // MIME types
@@ -68,6 +69,13 @@ export function handleRequest(
   if (pathname === "/api/state") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(getWebState()));
+    return;
+  }
+
+  // ── API: available models ──────────────────────────────────────────
+  if (pathname === "/api/models") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(MODELS));
     return;
   }
 

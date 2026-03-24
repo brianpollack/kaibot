@@ -60,7 +60,9 @@ export function renderMainPage(server: WebServer): string {
         <kbd>Project</kbd>
         <span id="project-dir">${esc(projectPath)}</span>
       </span>
-      <span class="status-item" title="Active Claude model">
+      <span class="status-item model-selector-trigger" id="model-trigger"
+            title="Click or press M to change model" role="button" tabindex="0"
+            aria-haspopup="listbox" aria-expanded="false">
         <kbd id="model-hotkey" aria-label="Press M to change model">M</kbd>
         <span id="current-model">${esc(model)}</span>
       </span>
@@ -105,15 +107,6 @@ export function renderMainPage(server: WebServer): string {
             <span class="nav-icon" aria-hidden="true">&#x1F50D;</span>
             <span class="nav-label">Tech Debt</span>
             <kbd aria-hidden="true">S</kbd>
-          </a>
-        </li>
-        <li>
-          <a href="#models" class="nav-item"
-             accesskey="m" title="Select Model [M]"
-             id="nav-models">
-            <span class="nav-icon" aria-hidden="true">&#x1F9E0;</span>
-            <span class="nav-label">Model</span>
-            <kbd aria-hidden="true">M</kbd>
           </a>
         </li>
       </ul>

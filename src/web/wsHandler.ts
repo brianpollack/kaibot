@@ -86,6 +86,17 @@ export function setupWebSocketHandler(wss: WebSocketServer): void {
     const msg = JSON.stringify({ type: "state", data: getWebState() });
     ws.send(msg);
 
+    ws.on("message", (raw: Buffer | string) => {
+      try {
+        const msg = JSON.parse(typeof raw === "string" ? raw : raw.toString());
+        if (msg.type === "select-model" && typeof msg.model === "string") {
+          uiStore.selectModel(msg.model);
+        }
+      } catch {
+        // Ignore malformed messages
+      }
+    });
+
     ws.on("close", () => {
       clients.delete(ws);
     });

@@ -64,3 +64,6 @@ Replaced the filename-based feature state machine (`_inprogress.md` / `_complete
 March 24th, 2026: main: brian
 Implemented a lightweight Web UI for KaiBot that runs alongside the existing Ink terminal UI. A Node.js `http` server starts on port 8500 (configurable via `KAI_WEB_PORT`/`KAI_WEB_HOST` env vars) and serves a server-side generated dashboard at `/main` (with `/` and `/login` redirecting there as a login placeholder). The UI features a dark-themed layout with a top status bar (project dir, model, provider, estimated daily spend), a left navigation menu with keyboard hotkeys and screen reader compatibility (accesskeys + ARIA), and four dockable panels (Thinking, Commands, File Operations, Plan) powered by rc-dock loaded from CDN. Real-time state updates flow from the `uiStore` singleton through WebSocket to all connected browser clients. New files: `src/web/WebServer.ts`, `src/web/routes.ts`, `src/web/templates.ts`, `src/web/wsHandler.ts`, `src/web/spendTracker.ts`, `web/static/css/main.css`, `web/static/html/client.js`, plus the static asset folders `web/static/images/` and `web/vendor/`.
 
+March 24th, 2026: main: brian
+Updated the Web UI to remove the duplicate "Model" entry from the left sidebar navigation and made the model display in the top status bar clickable.
+

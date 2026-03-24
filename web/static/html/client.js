@@ -351,10 +351,270 @@ function scheduleReconnect() {
 }
 
 // ---------------------------------------------------------------------------
+// Reusable Popup Menu
+// ---------------------------------------------------------------------------
+
+/**
+ * PopupMenu — keyboard (1-9, arrows, Enter, Escape) and mouse compatible.
+ * Items are numbered 1–9; arrow keys scroll if the list exceeds 9 items.
+ *
+ * Usage:
+ *   showPopupMenu({
+ *     items: [{ id: "foo", label: "Foo", description: "...", active: false }],
+ *     anchorEl: document.getElementById("trigger"),
+ *     onSelect: function(item) { ... },
+ *     onClose: function() { ... },
+ *   });
+ */
+
+let activePopup = null; // { el, onSelect, onClose, items, selectedIndex, scrollOffset }
+
+function showPopupMenu(opts) {
+  // Close any existing popup first
+  closePopupMenu();
+
+  var items = opts.items || [];
+  var anchorEl = opts.anchorEl;
+  var onSelect = opts.onSelect || function () {};
+  var onClose = opts.onClose || function () {};
+
+  // Create overlay
+  var overlay = document.createElement("div");
+  overlay.className = "popup-overlay";
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) closePopupMenu();
+  });
+
+  // Create menu container
+  var menu = document.createElement("div");
+  menu.className = "popup-menu";
+  menu.setAttribute("role", "listbox");
+  menu.setAttribute("tabindex", "-1");
+
+  // Position near anchor
+  if (anchorEl) {
+    var rect = anchorEl.getBoundingClientRect();
+    menu.style.position = "fixed";
+    menu.style.top = (rect.bottom + 4) + "px";
+    menu.style.right = (window.innerWidth - rect.right) + "px";
+  }
+
+  overlay.appendChild(menu);
+  document.body.appendChild(overlay);
+
+  activePopup = {
+    overlay: overlay,
+    menu: menu,
+    items: items,
+    selectedIndex: items.findIndex(function (it) { return it.active; }),
+    scrollOffset: 0,
+    onSelect: onSelect,
+    onClose: onClose,
+  };
+
+  if (activePopup.selectedIndex < 0) activePopup.selectedIndex = 0;
+
+  renderPopupItems();
+  menu.focus();
+}
+
+function renderPopupItems() {
+  if (!activePopup) return;
+
+  var menu = activePopup.menu;
+  var items = activePopup.items;
+  var selected = activePopup.selectedIndex;
+  var maxVisible = 9;
+  var scrollOffset = activePopup.scrollOffset;
+
+  // Adjust scroll so selected item is visible
+  if (selected < scrollOffset) {
+    scrollOffset = selected;
+  } else if (selected >= scrollOffset + maxVisible) {
+    scrollOffset = selected - maxVisible + 1;
+  }
+  activePopup.scrollOffset = scrollOffset;
+
+  var visibleItems = items.slice(scrollOffset, scrollOffset + maxVisible);
+  var html = "";
+
+  // Scroll-up indicator
+  if (scrollOffset > 0) {
+    html += '<div class="popup-scroll-indicator">▲ more</div>';
+  }
+
+  visibleItems.forEach(function (item, i) {
+    var globalIndex = scrollOffset + i;
+    var isSelected = globalIndex === selected;
+    var keyNum = i + 1;
+    var cls = "popup-item" + (isSelected ? " selected" : "") + (item.active ? " current" : "");
+
+    html +=
+      '<div class="' + cls + '" data-index="' + globalIndex + '" role="option"' +
+      (isSelected ? ' aria-selected="true"' : "") + ">" +
+      '<span class="popup-key">' + keyNum + "</span>" +
+      '<span class="popup-label">' + escHtml(item.label) + "</span>";
+    if (item.description) {
+      html += '<span class="popup-desc">' + escHtml(item.description) + "</span>";
+    }
+    if (item.active) {
+      html += '<span class="popup-active-badge">active</span>';
+    }
+    html += "</div>";
+  });
+
+  // Scroll-down indicator
+  if (scrollOffset + maxVisible < items.length) {
+    html += '<div class="popup-scroll-indicator">▼ more</div>';
+  }
+
+  menu.innerHTML = html;
+
+  // Attach click handlers
+  var itemEls = menu.querySelectorAll(".popup-item");
+  itemEls.forEach(function (el) {
+    el.addEventListener("click", function () {
+      var idx = parseInt(el.getAttribute("data-index"), 10);
+      if (!isNaN(idx) && idx >= 0 && idx < items.length) {
+        activePopup.onSelect(items[idx]);
+        closePopupMenu();
+      }
+    });
+    el.addEventListener("mouseenter", function () {
+      var idx = parseInt(el.getAttribute("data-index"), 10);
+      if (!isNaN(idx)) {
+        activePopup.selectedIndex = idx;
+        renderPopupItems();
+      }
+    });
+  });
+}
+
+function closePopupMenu() {
+  if (!activePopup) return;
+  if (activePopup.overlay && activePopup.overlay.parentNode) {
+    activePopup.overlay.parentNode.removeChild(activePopup.overlay);
+  }
+  var onClose = activePopup.onClose;
+  activePopup = null;
+  if (onClose) onClose();
+}
+
+// Global keydown handler for popup menu
+document.addEventListener("keydown", function (e) {
+  if (!activePopup) return;
+
+  var items = activePopup.items;
+  var maxVisible = 9;
+
+  switch (e.key) {
+    case "Escape":
+      e.preventDefault();
+      closePopupMenu();
+      break;
+
+    case "ArrowUp":
+      e.preventDefault();
+      activePopup.selectedIndex =
+        activePopup.selectedIndex > 0
+          ? activePopup.selectedIndex - 1
+          : items.length - 1;
+      renderPopupItems();
+      break;
+
+    case "ArrowDown":
+      e.preventDefault();
+      activePopup.selectedIndex =
+        activePopup.selectedIndex < items.length - 1
+          ? activePopup.selectedIndex + 1
+          : 0;
+      renderPopupItems();
+      break;
+
+    case "Enter":
+      e.preventDefault();
+      if (items[activePopup.selectedIndex]) {
+        activePopup.onSelect(items[activePopup.selectedIndex]);
+        closePopupMenu();
+      }
+      break;
+
+    default:
+      // Number keys 1-9 select visible items
+      var num = parseInt(e.key, 10);
+      if (num >= 1 && num <= maxVisible) {
+        e.preventDefault();
+        var globalIdx = activePopup.scrollOffset + num - 1;
+        if (globalIdx < items.length) {
+          activePopup.onSelect(items[globalIdx]);
+          closePopupMenu();
+        }
+      }
+      break;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Model Selector (uses PopupMenu)
+// ---------------------------------------------------------------------------
+
+var cachedModels = null;
+
+function openModelSelector() {
+  if (activePopup) return; // Already open
+
+  var trigger = document.getElementById("model-trigger");
+
+  function showWithModels(models) {
+    var items = models.map(function (m) {
+      return {
+        id: m.id,
+        label: m.id,
+        description: m.description,
+        active: m.id === state.model,
+      };
+    });
+
+    showPopupMenu({
+      items: items,
+      anchorEl: trigger,
+      onSelect: function (item) {
+        if (item.id !== state.model && ws && ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: "select-model", model: item.id }));
+        }
+      },
+      onClose: function () {
+        if (trigger) trigger.setAttribute("aria-expanded", "false");
+      },
+    });
+
+    if (trigger) trigger.setAttribute("aria-expanded", "true");
+  }
+
+  // Use cached models or fetch fresh
+  if (cachedModels) {
+    showWithModels(cachedModels);
+  } else {
+    fetch("/api/models")
+      .then(function (res) { return res.json(); })
+      .then(function (models) {
+        cachedModels = models;
+        showWithModels(models);
+      })
+      .catch(function () {
+        // Fallback: show current model only
+        showWithModels([{ id: state.model, description: "Current model" }]);
+      });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Keyboard shortcuts
 // ---------------------------------------------------------------------------
 
 document.addEventListener("keydown", function (e) {
+  // Don't intercept if popup is open (handled by popup keydown)
+  if (activePopup) return;
   // Don't intercept if user is typing in an input
   if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -364,9 +624,22 @@ document.addEventListener("keydown", function (e) {
       // Dashboard — already on it
       e.preventDefault();
       break;
+    case "m":
+      e.preventDefault();
+      openModelSelector();
+      break;
     case "q":
       // Could send a quit command via WebSocket in the future
       break;
+  }
+});
+
+// Click handler for model trigger in top bar
+document.addEventListener("click", function (e) {
+  var trigger = document.getElementById("model-trigger");
+  if (trigger && trigger.contains(e.target)) {
+    e.preventDefault();
+    openModelSelector();
   }
 });
 
