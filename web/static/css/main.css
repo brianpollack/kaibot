@@ -334,6 +334,12 @@ ul { list-style: none; }
 
 /* ── Conversation feed ───────────────────────────────────────────────── */
 
+/* Thinking block wrapper — ensure each block starts on its own line */
+.conv-thinking {
+  clear: both;
+  margin: 2px 0;
+}
+
 /* Thinking text — white, readable prose */
 .conv-thinking-line {
   padding: 1px 0;
@@ -798,6 +804,20 @@ ul { list-style: none; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.feature-list-cost {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #22C55E;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #0B1A0F;
+  border: 1px solid #22C55E44;
+  white-space: nowrap;
+  align-self: center;
 }
 
 /* ---------------------------------------------------------------------------

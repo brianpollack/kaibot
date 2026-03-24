@@ -208,6 +208,7 @@ interface CompleteFeature {
   summary: string;
   completedAt: string;
   status: string;
+  totalCostUsd: number;
 }
 
 interface FeaturesList {
@@ -295,6 +296,7 @@ function getFeaturesList(projectDir: string): FeaturesList {
             summary: String(data["summary"] ?? ""),
             completedAt: String(data["completedAt"] ?? ""),
             status: String(data["status"] ?? "unknown"),
+            totalCostUsd: Number(data["totalCostUsd"] ?? 0),
           });
         } catch {
           // Skip malformed log files

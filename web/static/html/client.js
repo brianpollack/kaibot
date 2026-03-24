@@ -776,6 +776,12 @@ function renderPendingFeatures(items) {
   }).join("");
 }
 
+function formatCost(cost) {
+  if (!cost || cost === 0) return "$0.00";
+  if (cost < 0.01) return "<$0.01";
+  return "$" + cost.toFixed(2);
+}
+
 function renderCompleteFeatures(items) {
   if (!items || items.length === 0) {
     return '<div class="empty-state">(no complete features)</div>';
@@ -791,6 +797,7 @@ function renderCompleteFeatures(items) {
           '<div class="feature-list-meta">' + escHtml(formatDate(item.completedAt)) + '</div>' +
           (item.summary ? '<div class="feature-list-summary">' + escHtml(item.summary.slice(0, 120)) + '</div>' : '') +
         '</div>' +
+        '<span class="feature-list-cost">' + formatCost(item.totalCostUsd) + '</span>' +
       '</div>'
     );
   }).join("");
