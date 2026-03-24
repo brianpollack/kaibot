@@ -17,7 +17,16 @@ import { WebServer } from "./web/WebServer.js";
 const subcommand = process.argv[2];
 
 if (subcommand === "models") {
-  await printModels();
+  loadProjectEnv(resolve("."));
+  const providerArg = process.argv[3];
+  if (providerArg === "openrouter" || providerArg === "anthropic") {
+    await printModels(providerArg as ProviderName);
+  } else {
+    await printModels();
+    if (process.env.OPENROUTER_API_KEY) {
+      console.log("---\nOpenRouter is also available. Run: npm run models -- openrouter\n");
+    }
+  }
   process.exit(0);
 }
 

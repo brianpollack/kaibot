@@ -93,12 +93,15 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
  * Returns undefined if no matching pricing is found.
  */
 export function getPricing(modelId: string): ModelPricing | undefined {
+  // Strip provider prefix (e.g. "anthropic/claude-opus-4" → "claude-opus-4")
+  const bareId = modelId.includes("/") ? modelId.split("/").slice(1).join("/") : modelId;
+
   // Try longest prefix first for specificity
   const prefixes = Object.keys(MODEL_PRICING).sort(
     (a, b) => b.length - a.length,
   );
   for (const prefix of prefixes) {
-    if (modelId.startsWith(prefix)) {
+    if (bareId.startsWith(prefix)) {
       return MODEL_PRICING[prefix];
     }
   }
@@ -181,8 +184,12 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<ApiModel[]>
 
   const json = (await response.json()) as OpenRouterModelListResponse;
 
+  if (!json.data || !Array.isArray(json.data)) {
+    throw new Error("Unexpected OpenRouter API response: missing data array");
+  }
+
   // Filter to anthropic/claude models only for relevance
-  return json.data
+  const filtered = json.data
     .filter((m) => m.id.startsWith("anthropic/claude"))
     .map((m) => ({
       type: "model",
@@ -190,6 +197,12 @@ export async function fetchOpenRouterModels(apiKey: string): Promise<ApiModel[]>
       display_name: m.name || m.id,
       created_at: "",
     }));
+
+  if (filtered.length === 0) {
+    throw new Error("No Claude models found in OpenRouter response");
+  }
+
+  return filtered;
 }
 
 /**
@@ -236,7 +249,10 @@ export async function printModels(provider: ProviderName = "anthropic"): Promise
           .sort((a, b) => a.display_name.localeCompare(b.display_name))
           .map((m) => ({ id: m.id, displayName: m.display_name }));
         isLive = true;
-      } catch {
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`Warning: Failed to fetch models from OpenRouter API: ${msg}`);
+        console.error("Falling back to static model list.\n");
         models = OPENROUTER_MODELS.map((m) => ({
           id: m.id,
           displayName: m.description,

@@ -109,3 +109,6 @@ Implemented OpenRouter as an alternative provider to Anthropic's direct API. Whe
 March 24th, 2026: main: brian
 Feature ID: H0owDjSb
 
+March 24th, 2026: main: brian
+Fixed `npm run testOpenrouter` model listing and improved the overall model discovery experience:
+

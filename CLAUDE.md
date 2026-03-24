@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm run bot -- /path/to/project   # Start the watcher bot (Linear issues if configured, else features/)
 npm run feature -- Feature name   # Create a new feature (Linear issue if configured, else features file)
-npm run models       # List available Claude models
+npm run models       # List available models (loads .env; pass -- openrouter for OpenRouter)
 npm run build        # Compile TypeScript to dist/
 npm run typecheck    # Type-check without emitting
 npm run lint         # ESLint

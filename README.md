@@ -26,7 +26,7 @@ You can also place these in `<project>/.env`. KaiBot loads the target project's 
 | `npm run bot -- /path/to/project`            | Watch Linear issues (when configured) or `features/` `.md` files |
 | `npm run local`                              | Same as `bot` but targets the current directory (`.`)         |
 | `npm run feature -- Add user authentication` | Create a Linear issue (when configured) or feature file with AI review |
-| `npm run models`                             | List available Claude models with copy-paste `export` commands |
+| `npm run models`                             | List available models (loads `.env`; pass `-- openrouter` for OpenRouter models) |
 | `npm run testOpenrouter`                     | Test OpenRouter connection and list available models           |
 | `npm run dev`                                | Run the dev entry point (`src/index.ts`) via tsx              |
 | `npm start`                                  | Run the compiled bot from `dist/index.js` (requires a build)  |

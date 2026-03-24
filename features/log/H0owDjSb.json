@@ -1,0 +1,47 @@
+{
+  "id": "H0owDjSb",
+  "requestedAt": "2026-03-24T17:27:34.938Z",
+  "completedAt": "2026-03-24T17:27:50.949Z",
+  "executionTimeMs": 1873,
+  "model": "claude-opus-4-6",
+  "tokensIn": 0,
+  "tokensOut": 0,
+  "cacheReadTokens": 0,
+  "cacheWriteTokens": 0,
+  "totalCostUsd": 0,
+  "numTurns": 1,
+  "filesChanged": [
+    "CHANGELOG.md",
+    "features/complete/ss4n03sj.md"
+  ],
+  "testsAdded": [],
+  "gitBranch": "main",
+  "gitCommitHash": "300ba0259eeac48ae2301cfbf9fe175cc77b858a",
+  "description": "Feature ID: ss4n03sj The command npm run testOpenrouter detects the Openrouter key but the model list is still from Anthropic.  Verify the way the model list is loaded should use the Openrouter settings.",
+  "planPoints": [],
+  "source": "file",
+  "linearIssueId": null,
+  "linearIdentifier": null,
+  "status": "success",
+  "errorMessage": null,
+  "title": "Fix testOpenrouter model list to use OpenRouter",
+  "summary": "",
+  "conversationHistory": [
+    {
+      "type": "thinking",
+      "content": "API Error: 402 {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}",
+      "timestamp": "2026-03-24T17:27:50.949Z"
+    },
+    {
+      "type": "system",
+      "content": "✅ Feature complete — Cost: $0.0000  Turns: 1  Time: 2.5s",
+      "timestamp": "2026-03-24T17:27:50.949Z"
+    },
+    {
+      "type": "git",
+      "content": "Feature ID: H0owDjSb Feature ID: ss4n03sj The command npm run testOpenrouter detects the Openrouter key but the model list is still from Anthropic.  Verify the way the model list is loaded should use the Openrouter settings. [H0owDjSb]",
+      "timestamp": "2026-03-24T17:27:50.949Z"
+    }
+  ],
+  "fileActivity": []
+}
