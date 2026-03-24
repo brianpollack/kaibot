@@ -7,6 +7,7 @@ import { createFeature } from "./feature_creator.js";
 import { printModels } from "./models.js";
 import { mountUI, unmountUI } from "./ui/render.js";
 import { uiStore } from "./ui/store.js";
+import { WebServer } from "./web/WebServer.js";
 
 // ---------------------------------------------------------------------------
 // Subcommands
@@ -90,22 +91,37 @@ const bot = new KaiBot(resolvedDir, model, useLinear);
 // Mount the Ink UI
 mountUI();
 
-process.on("SIGINT", () => {
-  unmountUI();
-  bot.stop();
-  process.exit(0);
+// Start the web UI server
+const webPort = process.env.KAI_WEB_PORT ? parseInt(process.env.KAI_WEB_PORT, 10) : 8500;
+const webHost = process.env.KAI_WEB_HOST ?? "127.0.0.1";
+const webServer = new WebServer({
+  port: webPort,
+  host: webHost,
+  projectDir: resolvedDir,
+  model,
 });
 
-process.on("SIGTERM", () => {
-  unmountUI();
-  bot.stop();
-  process.exit(0);
+webServer.start().then(() => {
+  uiStore.setStatusMessage(`Web UI: ${webServer.url}  |  Watching for features…`);
+}).catch((err) => {
+  const msg = err instanceof Error ? err.message : String(err);
+  uiStore.setStatusMessage(`Web UI failed to start: ${msg}`);
 });
 
-uiStore.on("quit", () => {
+// Keep webServer model in sync with UI model changes
+uiStore.on("model-changed", (newModel: string) => {
+  webServer.model = newModel;
+});
+
+const shutdown = () => {
   unmountUI();
   bot.stop();
-  process.exit(0);
-});
+  webServer.stop().finally(() => process.exit(0));
+};
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+uiStore.on("quit", shutdown);
 
 await bot.start();

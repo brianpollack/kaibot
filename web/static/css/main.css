@@ -1,0 +1,455 @@
+/* =========================================================================
+   KaiBot Web UI — main.css
+   ========================================================================= */
+
+/* ---------------------------------------------------------------------------
+   Reset & base
+   --------------------------------------------------------------------------- */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  background: #0d1117;
+  color: #c9d1d9;
+  overflow: hidden;
+}
+
+a { color: inherit; text-decoration: none; }
+ul { list-style: none; }
+
+/* ---------------------------------------------------------------------------
+   Top status bar
+   --------------------------------------------------------------------------- */
+
+#top-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 16px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+}
+
+.status-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  font-size: 15px;
+  font-weight: 700;
+  color: #58a6ff;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-idle      { background: #30363d; color: #8b949e; }
+.badge-watching  { background: #1a1e24; color: #d29922; border: 1px solid #d29922; }
+.badge-processing { background: #0d1f0d; color: #3fb950; border: 1px solid #3fb950; }
+.badge-error     { background: #2d0d0d; color: #f85149; border: 1px solid #f85149; }
+
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.status-item kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #8b949e;
+}
+
+.spend-label {
+  font-size: 11px;
+  color: #8b949e;
+}
+
+#today-spend {
+  color: #3fb950;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+   Main layout: side nav + dock container
+   --------------------------------------------------------------------------- */
+
+#app-layout {
+  display: flex;
+  height: calc(100vh - 40px - 30px); /* minus top status and bottom status */
+}
+
+/* ---------------------------------------------------------------------------
+   Side navigation
+   --------------------------------------------------------------------------- */
+
+#side-nav {
+  width: 180px;
+  min-width: 180px;
+  background: #161b22;
+  border-right: 1px solid #30363d;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px 0;
+  flex-shrink: 0;
+}
+
+#side-nav ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin: 0 8px;
+  transition: background 0.15s;
+  cursor: pointer;
+}
+
+.nav-item:hover {
+  background: #21262d;
+}
+
+.nav-item:focus-visible {
+  outline: 2px solid #58a6ff;
+  outline-offset: -2px;
+}
+
+.nav-item.active {
+  background: #1f6feb22;
+  color: #58a6ff;
+}
+
+.nav-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.nav-label {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.nav-item kbd {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #8b949e;
+}
+
+.nav-footer {
+  padding: 8px 16px;
+  font-size: 10px;
+  color: #484f58;
+}
+
+/* ---------------------------------------------------------------------------
+   Dock container (main content area)
+   --------------------------------------------------------------------------- */
+
+#dock-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: #0d1117;
+}
+
+/* ---------------------------------------------------------------------------
+   rc-dock overrides — dark theme
+   --------------------------------------------------------------------------- */
+
+.dock-layout {
+  background: #0d1117;
+}
+
+.dock-panel {
+  background: #161b22 !important;
+  border: 1px solid #30363d !important;
+  border-radius: 6px !important;
+}
+
+.dock-tab {
+  background: #21262d !important;
+  color: #c9d1d9 !important;
+  border: none !important;
+  font-family: inherit !important;
+  font-size: 12px !important;
+}
+
+.dock-tab-active {
+  background: #161b22 !important;
+  color: #58a6ff !important;
+  border-bottom: 2px solid #58a6ff !important;
+}
+
+.dock-tab-bar {
+  background: #21262d !important;
+  border-bottom: 1px solid #30363d !important;
+}
+
+.dock-tab-close-btn {
+  color: #8b949e !important;
+}
+
+.dock-divider {
+  background: #30363d !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Panel content styles
+   --------------------------------------------------------------------------- */
+
+.panel-content {
+  padding: 8px 12px;
+  height: 100%;
+  overflow-y: auto;
+  font-size: 12px;
+  color: #c9d1d9;
+}
+
+.panel-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.panel-content::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 3px;
+}
+
+.panel-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Thinking panel ──────────────────────────────────────────────────── */
+
+.thinking-line {
+  padding: 1px 0;
+  color: #d2a8ff;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.thinking-line.empty {
+  color: #30363d;
+}
+
+/* ── Commands panel ──────────────────────────────────────────────────── */
+
+.command-entry {
+  padding: 2px 0;
+  font-family: inherit;
+}
+
+.command-entry.active {
+  color: #3fb950;
+}
+
+.command-entry.active::before {
+  content: "▶ ";
+  color: #3fb950;
+}
+
+.command-entry.inactive {
+  color: #484f58;
+}
+
+.command-entry.inactive::before {
+  content: "  ";
+}
+
+/* ── File ops panel ──────────────────────────────────────────────────── */
+
+.file-op {
+  padding: 2px 0;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.file-op-type {
+  font-weight: 700;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.file-op-type.read  { background: #0d2d6e; color: #58a6ff; }
+.file-op-type.write { background: #0d1f0d; color: #3fb950; }
+.file-op-type.edit  { background: #2d1f00; color: #d29922; }
+
+.file-op-path {
+  color: #c9d1d9;
+  word-break: break-all;
+}
+
+.file-op-preview {
+  color: #484f58;
+  font-size: 11px;
+}
+
+/* ── Plan panel ──────────────────────────────────────────────────────── */
+
+.plan-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 0;
+}
+
+.plan-step.checked {
+  color: #3fb950;
+}
+
+.plan-step.unchecked {
+  color: #c9d1d9;
+}
+
+.plan-checkbox {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
+.plan-text {
+  word-break: break-word;
+}
+
+.plan-complete {
+  margin-top: 12px;
+  padding: 8px;
+  background: #0d1f0d;
+  border: 1px solid #238636;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.plan-complete-title {
+  font-weight: 700;
+  color: #3fb950;
+}
+
+.plan-cost {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #3fb950;
+}
+
+/* ── Feature name display ────────────────────────────────────────────── */
+
+.feature-name {
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #58a6ff;
+  border-bottom: 1px solid #21262d;
+  margin-bottom: 4px;
+}
+
+/* ── Stage badge ─────────────────────────────────────────────────────── */
+
+.stage-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-left: 8px;
+}
+
+.stage-reading   { background: #0d2d6e; color: #58a6ff; }
+.stage-thinking  { background: #2a1744; color: #d2a8ff; }
+.stage-planning  { background: #0d2d4d; color: #56d4dd; }
+.stage-executing { background: #0d1f0d; color: #3fb950; }
+.stage-complete  { background: #0d2f0d; color: #56d364; }
+
+/* ── Empty state ─────────────────────────────────────────────────────── */
+
+.empty-state {
+  color: #484f58;
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Bottom status bar
+   --------------------------------------------------------------------------- */
+
+#bottom-status {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: #161b22;
+  border-top: 1px solid #30363d;
+  font-size: 12px;
+  color: #58a6ff;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Accessibility: skip link
+   --------------------------------------------------------------------------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Focus styles for keyboard navigation */
+:focus-visible {
+  outline: 2px solid #58a6ff;
+  outline-offset: 2px;
+}
