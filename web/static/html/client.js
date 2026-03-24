@@ -15,6 +15,7 @@ let state = {
   model: "",
   featureName: null,
   featureStage: null,
+  featureStartTime: null,
   thinkingLines: [],
   commands: [],
   fileOps: [],
@@ -43,6 +44,88 @@ function escHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+// ---------------------------------------------------------------------------
+// Runtime timer — ticks every second to update the Feature Status panel
+// ---------------------------------------------------------------------------
+
+let runtimeTimer = null;
+
+function startRuntimeTimer() {
+  if (runtimeTimer) return;
+  runtimeTimer = setInterval(function () {
+    // Only re-render the feature-status panel if a feature is processing
+    if (state.featureStartTime && dockLayout) {
+      var tab = dockLayout.find("feature-status");
+      if (tab) {
+        dockLayout.updateTab("feature-status", null, true);
+      }
+    }
+  }, 1000);
+}
+
+function formatElapsed(startTime) {
+  if (!startTime) return "—";
+  var elapsed = Math.floor((Date.now() - startTime) / 1000);
+  var mins = Math.floor(elapsed / 60);
+  var secs = elapsed % 60;
+  if (mins > 0) {
+    return mins + "m " + (secs < 10 ? "0" : "") + secs + "s";
+  }
+  return secs + "s";
+}
+
+function renderFeatureStatusContent() {
+  var html = "";
+
+  // Feature name
+  html += '<div class="status-section">';
+  html += '<div class="status-label">Feature</div>';
+  if (state.featureName) {
+    html += '<div class="status-value feature-value">' + escHtml(state.featureName) + "</div>";
+  } else {
+    html += '<div class="status-value dim">No feature in progress</div>';
+  }
+  html += "</div>";
+
+  // Stage
+  html += '<div class="status-section">';
+  html += '<div class="status-label">Stage</div>';
+  if (state.featureStage) {
+    html +=
+      '<div class="status-value">' +
+      '<span class="stage-badge stage-' + state.featureStage + '">' +
+      state.featureStage.toUpperCase() +
+      "</span></div>";
+  } else {
+    html += '<div class="status-value dim">—</div>';
+  }
+  html += "</div>";
+
+  // Runtime
+  html += '<div class="status-section">';
+  html += '<div class="status-label">Runtime</div>';
+  html += '<div class="status-value runtime-value">' + formatElapsed(state.featureStartTime) + "</div>";
+  html += "</div>";
+
+  // Model
+  html += '<div class="status-section">';
+  html += '<div class="status-label">Model</div>';
+  html += '<div class="status-value">' + escHtml(state.model || "—") + "</div>";
+  html += "</div>";
+
+  // Bot status
+  html += '<div class="status-section">';
+  html += '<div class="status-label">Bot Status</div>';
+  html +=
+    '<div class="status-value">' +
+    '<span class="badge badge-' + state.status + '">' +
+    state.status.toUpperCase() +
+    "</span></div>";
+  html += "</div>";
+
+  return html;
 }
 
 function renderThinkingContent() {
@@ -151,6 +234,9 @@ function loadTab(tabData) {
   let contentFn;
 
   switch (id) {
+    case "feature-status":
+      contentFn = renderFeatureStatusContent;
+      break;
     case "thinking":
       contentFn = renderThinkingContent;
       break;
@@ -192,7 +278,14 @@ class PanelWrapper extends React.Component {
 
   _update() {
     if (this._ref.current) {
-      this._ref.current.innerHTML = this.props.renderFn();
+      var el = this._ref.current;
+      // Check if user is scrolled near the bottom before updating
+      var isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      el.innerHTML = this.props.renderFn();
+      // Auto-scroll to bottom for console-like panels if user was near bottom
+      if (isNearBottom) {
+        el.scrollTop = el.scrollHeight;
+      }
     }
   }
 
@@ -242,10 +335,22 @@ const defaultLayout = {
         ],
       },
       {
-        tabs: [
-          { id: "plan", title: "\uD83D\uDCCB Plan", closable: false },
-        ],
+        mode: "vertical",
         size: 400,
+        children: [
+          {
+            tabs: [
+              { id: "feature-status", title: "\uD83D\uDCE1 Feature Status", closable: false },
+            ],
+            size: 200,
+          },
+          {
+            tabs: [
+              { id: "plan", title: "\uD83D\uDCCB Plan", closable: false },
+            ],
+            size: 400,
+          },
+        ],
       },
     ],
   },
@@ -290,7 +395,7 @@ function updateDOM() {
   // Force rc-dock panels to re-render
   if (dockLayout) {
     // Touch each panel to trigger React re-render
-    ["thinking", "commands", "fileops", "plan"].forEach(function (id) {
+    ["feature-status", "thinking", "commands", "fileops", "plan"].forEach(function (id) {
       const tab = dockLayout.find(id);
       if (tab) {
         dockLayout.updateTab(id, null, true);
@@ -662,4 +767,5 @@ fetch("/api/state")
   .finally(function () {
     initDock();
     connectWebSocket();
+    startRuntimeTimer();
   });

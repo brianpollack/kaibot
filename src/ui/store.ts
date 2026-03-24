@@ -49,6 +49,8 @@ export interface UIState {
   model: string;
   featureName: string | null;
   featureStage: FeatureStage;
+  /** Timestamp (Date.now()) when the current feature started processing, or null. */
+  featureStartTime: number | null;
 
   // Terminal dimensions
   terminalColumns: number;
@@ -95,9 +97,9 @@ export interface UIState {
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAX_THINKING_LINES = 6;
-const MAX_COMMANDS = 5;
-const MAX_FILE_OPS = 4;
+const MAX_THINKING_LINES = 200;
+const MAX_COMMANDS = 100;
+const MAX_FILE_OPS = 100;
 
 // ---------------------------------------------------------------------------
 // Store (singleton)
@@ -110,6 +112,7 @@ class UIStore extends EventEmitter {
     model: "",
     featureName: null,
     featureStage: null,
+    featureStartTime: null,
     terminalColumns: (process.stdout.columns ?? 80) - 4,
     terminalRows: process.stdout.rows ?? 24,
     thinkingLines: [],
@@ -155,6 +158,11 @@ class UIStore extends EventEmitter {
 
   setFeatureStage(stage: FeatureStage): void {
     this.state.featureStage = stage;
+    this.emitChange();
+  }
+
+  setFeatureStartTime(time: number | null): void {
+    this.state.featureStartTime = time;
     this.emitChange();
   }
 
@@ -350,6 +358,7 @@ class UIStore extends EventEmitter {
   resetFeature(): void {
     this.state.featureName = null;
     this.state.featureStage = null;
+    this.state.featureStartTime = null;
     this.state.thinkingLines = [];
     this.state.commands = [];
     this.state.fileOps = [];

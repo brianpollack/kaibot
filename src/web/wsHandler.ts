@@ -14,6 +14,7 @@ export interface WebUIState {
   model: string;
   featureName: string | null;
   featureStage: UIState["featureStage"];
+  featureStartTime: number | null;
   thinkingLines: string[];
   commands: UIState["commands"];
   fileOps: UIState["fileOps"];
@@ -41,6 +42,7 @@ export function getWebState(): WebUIState {
     model: s.model,
     featureName: s.featureName,
     featureStage: s.featureStage,
+    featureStartTime: s.featureStartTime,
     thinkingLines: s.thinkingLines,
     commands: s.commands,
     fileOps: s.fileOps,

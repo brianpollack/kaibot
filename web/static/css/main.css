@@ -407,6 +407,53 @@ ul { list-style: none; }
 .stage-executing { background: #0d1f0d; color: #3fb950; }
 .stage-complete  { background: #0d2f0d; color: #56d364; }
 
+/* ── Feature Status panel ────────────────────────────────────────────── */
+
+.status-section {
+  padding: 6px 0;
+  border-bottom: 1px solid #21262d;
+}
+
+.status-section:last-child {
+  border-bottom: none;
+}
+
+.status-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8b949e;
+  margin-bottom: 2px;
+}
+
+.status-value {
+  font-size: 13px;
+  color: #c9d1d9;
+}
+
+.status-value.dim {
+  color: #484f58;
+  font-style: italic;
+}
+
+.status-value.feature-value {
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+.status-value.runtime-value {
+  color: #d2a8ff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Console-like scrollable panels ─────────────────────────────────── */
+
+.panel-content.console {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+}
+
 /* ── Empty state ─────────────────────────────────────────────────────── */
 
 .empty-state {

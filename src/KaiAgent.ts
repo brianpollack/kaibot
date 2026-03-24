@@ -88,6 +88,7 @@ export async function processFeature(
 
   uiStore.setFeatureName(feature.name);
   uiStore.setFeatureStage("reading");
+  uiStore.setFeatureStartTime(startTime);
   uiStore.setStatusMessage(`Starting feature: ${feature.name}`);
 
   let hasSeenToolUse = false;

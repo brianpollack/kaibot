@@ -88,5 +88,47 @@
     "status": "success",
     "errorMessage": null,
     "summary": "A lightweight Web UI was added to KaiBot that runs on port 8500 alongside the existing Ink terminal UI, with a server-side generated dashboard featuring a dark-themed layout, top status bar showing project information and estimated daily spend, and a keyboard-accessible left navigation menu. The interface includes four dockable panels powered by rc-dock for monitoring thinking processes, commands, file operations, and plans, with real-time state updates flowing through WebSocket connections to all connected clients. New modules handle HTTP routing, HTML template generation, WebSocket message handling, and spend tracking from the bot's activity log."
+  },
+  {
+    "id": "wo0y5QVZ",
+    "requestedAt": "2026-03-24T14:32:32.302Z",
+    "completedAt": "2026-03-24T14:38:49.709Z",
+    "executionTimeMs": 231465,
+    "model": "claude-opus-4-6",
+    "tokensIn": 21,
+    "tokensOut": 8760,
+    "cacheReadTokens": 859341,
+    "cacheWriteTokens": 58155,
+    "totalCostUsd": 1.1440407500000003,
+    "numTurns": 26,
+    "filesChanged": [
+      "CHANGELOG.md",
+      "features/complete/webupdate.md",
+      "features/WebUIStreamingStatus.md",
+      "src/web/routes.ts",
+      "src/web/templates.ts",
+      "src/web/wsHandler.ts",
+      "web/static/css/main.css",
+      "web/static/html/client.js"
+    ],
+    "testsAdded": [],
+    "gitBranch": "main",
+    "gitCommitHash": "e0c26403ee779b30b0bb111b41e13d08bf4b9f97",
+    "description": "Update the WebUI - Remove Model from the left, we already have it on the top. - Create a reusable popup menu where each selectable item have a keyboard values from 1 to 9 and up and down arrows to scroll if the list is longer than 9.  It should be mouse compatible as well. This popup menu should be tied to the M key or clicking on the model at the top. It should function like the InkUI version. Get a list of available models and present that to the user communicate back to the web server / KaiBot  and update the webui and InkJS",
+    "planPoints": [
+      "1. Remove the \"Model\" nav item from the left sidebar — removed from templates.ts",
+      "2. Make the model display in the top bar clickable — added role=button, tabindex, aria attrs in templates.ts",
+      "3. Create the reusable popup menu component in client.js — PopupMenu with 1-9 keys, arrows, Enter/Escape, mouse hover/click",
+      "4. Wire up M key and model click to open the popup — openModelSelector() fetches /api/models, opens popup anchored to trigger",
+      "5. Add API endpoint for model list and model change WebSocket message handling — /api/models route + ws \"select-model\" handler",
+      "6. Add CSS styles for the popup menu overlay — dark theme popup with scroll indicators, active badge, key badges",
+      "7. Handle model selection: send to server via WebSocket, update uiStore and web UI — ws.send select-model, uiStore.selectModel() broadcasts"
+    ],
+    "source": "file",
+    "linearIssueId": null,
+    "linearIdentifier": null,
+    "status": "success",
+    "errorMessage": null,
+    "summary": "The Web UI was updated to remove the duplicate \"Model\" entry from the left sidebar and made the model display in the top bar clickable. A reusable PopupMenu component was created supporting both keyboard input (number keys 1–9 for quick selection, arrow keys to navigate, Enter/Escape to confirm/close) and mouse interaction (click to select, hover to highlight). The model selector, triggered by pressing M or clicking the model in the top bar, fetches available models from a new `/api/models` endpoint and sends selections back to the server via WebSocket to update all connected clients."
   }
 ]

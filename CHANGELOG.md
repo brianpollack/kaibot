@@ -67,3 +67,6 @@ Implemented a lightweight Web UI for KaiBot that runs alongside the existing Ink
 March 24th, 2026: main: brian
 Updated the Web UI to remove the duplicate "Model" entry from the left sidebar navigation and made the model display in the top status bar clickable.
 
+March 24th, 2026: main: brian
+Implemented the missing streaming status panels for the KaiBot Web UI dashboard. Added a new "Feature Status" panel to the rc-dock layout that shows the current feature name, processing stage (with colored badge), live runtime timer (updates every second), active model, and bot status. Increased store history limits from 6/5/4 to 200/100/100 for thinking lines, commands, and file ops respectively, so the web UI can display full scrollable history in console-like panels while the terminal Ink UI continues to show only the last few items. Added auto-scroll behavior to all panels so they stay pinned to the bottom as new content streams in (unless the user has scrolled up). The `featureStartTime` timestamp is now tracked in UIState and broadcast via WebSocket to enable the client-side runtime timer.
+

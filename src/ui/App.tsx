@@ -201,7 +201,7 @@ function CommandPanel({
       {commands.length === 0 ? (
         <Text dimColor>{"  (no commands yet)"}</Text>
       ) : (
-        commands.map((cmd, i) => (
+        commands.slice(-5).map((cmd, i) => (
           <Text key={i} color={cmd.active ? "green" : "gray"}>
             {"  " + (cmd.active ? "▶ " : "  ") + truncate(cmd.command, cmdWidth)}
           </Text>
@@ -240,7 +240,7 @@ function FileOpsPanel({
       {fileOps.length === 0 ? (
         <Text dimColor>{"  (no file ops yet)"}</Text>
       ) : (
-        fileOps.map((op, i) => (
+        fileOps.slice(-4).map((op, i) => (
           <Box key={i}>
             <Text color={typeColor(op.type)} bold>
               {"  [" + typeLabel(op.type) + "] "}
