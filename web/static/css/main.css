@@ -641,6 +641,97 @@ ul { list-style: none; }
 }
 
 /* ---------------------------------------------------------------------------
+   Features view — two-panel dock replacing the dashboard content area
+   --------------------------------------------------------------------------- */
+
+#features-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0B0F1A;
+}
+
+#features-panels {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+#panel-pending {
+  flex: 1;
+  min-height: 120px;
+}
+
+#panel-complete-features {
+  flex: 1;
+  min-height: 120px;
+}
+
+/* Feature list items */
+.feature-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid #1A2233;
+}
+
+.feature-list-item:last-child {
+  border-bottom: none;
+}
+
+.feature-list-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.feature-list-badge.pending  { background: #0B1A3B; color: #3B82F6; border: 1px solid #3B82F644; }
+.feature-list-badge.hold     { background: #1A1400; color: #F59E0B; border: 1px solid #F59E0B44; }
+.feature-list-badge.success  { background: #0B1A0F; color: #22C55E; border: 1px solid #22C55E44; }
+.feature-list-badge.error    { background: #1A0B0B; color: #EF4444; border: 1px solid #EF444444; }
+.feature-list-badge.unknown  { background: #1A1826; color: #9CA3AF; border: 1px solid #2A344A; }
+
+.feature-list-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.feature-list-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #FFFFFF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feature-list-meta {
+  font-size: 11px;
+  color: #9CA3AF;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feature-list-summary {
+  font-size: 11px;
+  color: #6B7280;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------------------------------------------------------------------------
    Bottom status bar
    --------------------------------------------------------------------------- */
 

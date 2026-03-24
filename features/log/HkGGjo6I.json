@@ -1,0 +1,38 @@
+{
+  "id": "HkGGjo6I",
+  "requestedAt": "2026-03-24T15:44:34.810Z",
+  "completedAt": "2026-03-24T15:47:56.290Z",
+  "executionTimeMs": 147933,
+  "model": "claude-sonnet-4-6",
+  "tokensIn": 23,
+  "tokensOut": 7932,
+  "cacheReadTokens": 721318,
+  "cacheWriteTokens": 44106,
+  "totalCostUsd": 0.5008419,
+  "numTurns": 27,
+  "filesChanged": [
+    "CHANGELOG.md",
+    "features/complete/settings.md",
+    "src/__tests__/settings.test.ts",
+    "src/kai_bot.ts",
+    "src/settings.ts"
+  ],
+  "testsAdded": [
+    "src/__tests__/settings.test.ts"
+  ],
+  "gitBranch": "main",
+  "gitCommitHash": "85a767566d64a0ac28aa347254beab1fd1249c62",
+  "description": "Settings for the Model, Provider (Anthropic) and any other settings we add should be saved to a .kaibot/settings.json file which can be loaded upon project start to reload previous settings.",
+  "planPoints": [
+    "1. Create `src/settings.ts` with `KaiBotSettings` type, `loadSettings`, and `saveSettings` functions — created src/settings.ts",
+    "2. Update `src/kai_bot.ts` to load settings on startup and use saved model as fallback (env var > settings > default) — loadSettings called before model is resolved",
+    "3. Save settings to disk when the model changes via the `model-changed` event in `src/kai_bot.ts` — saveSettings called inside model-changed handler",
+    "4. Add tests for `src/settings.ts` in `src/__tests__/settings.test.ts` — 11 tests covering load/save/round-trip, all passing"
+  ],
+  "source": "file",
+  "linearIssueId": null,
+  "linearIdentifier": null,
+  "status": "success",
+  "errorMessage": null,
+  "summary": "KaiBot now persists model and provider settings to `.kaibot/settings.json`, allowing configurations to survive bot restarts. At startup, the application loads saved settings using a priority system where environment variables override the settings file, which overrides the default `claude-opus-4-6` model. When users change the model through the UI, the new selection is automatically saved to disk."
+}

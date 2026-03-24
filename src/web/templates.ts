@@ -79,19 +79,28 @@ export function renderMainPage(server: WebServer): string {
       <ul>
         <li>
           <a href="/main" class="nav-item active" aria-current="page"
-             accesskey="d" title="Dashboard [D]">
+             accesskey="d" title="Dashboard [D]" id="nav-dashboard">
             <span class="nav-icon" aria-hidden="true">&#x1F4CA;</span>
             <span class="nav-label">Dashboard</span>
             <kbd aria-hidden="true">D</kbd>
           </a>
         </li>
         <li>
-          <a href="#features" class="nav-item"
-             accesskey="f" title="New Feature [F]"
+          <a href="#features-view" class="nav-item"
+             accesskey="f" title="Features [F]"
+             id="nav-features">
+            <span class="nav-icon" aria-hidden="true">&#x1F4CB;</span>
+            <span class="nav-label">Features</span>
+            <kbd aria-hidden="true">F</kbd>
+          </a>
+        </li>
+        <li>
+          <a href="#new-feature" class="nav-item"
+             accesskey="n" title="New Feature [N]"
              id="nav-feature">
             <span class="nav-icon" aria-hidden="true">&#x2728;</span>
             <span class="nav-label">New Feature</span>
-            <kbd aria-hidden="true">F</kbd>
+            <kbd aria-hidden="true">N</kbd>
           </a>
         </li>
         <li>
@@ -157,6 +166,28 @@ export function renderMainPage(server: WebServer): string {
         </div>
       </div>
 
+    </main>
+
+    <!-- ── Features view (hidden by default, toggled by F key / nav) ─── -->
+    <main id="features-view" style="display:none" role="main" aria-label="Features list">
+      <div id="features-panels">
+        <div class="panel" id="panel-pending">
+          <div class="panel-tab-bar">
+            <span class="panel-tab">&#x23F3; Pending Features</span>
+          </div>
+          <div class="panel-content" id="pending-content"
+               role="region" aria-label="Pending features"></div>
+        </div>
+        <div class="resize-handle resize-handle-h" id="drag-features"
+             aria-hidden="true" title="Drag to resize"></div>
+        <div class="panel" id="panel-complete-features">
+          <div class="panel-tab-bar">
+            <span class="panel-tab">&#x2705; Complete Features</span>
+          </div>
+          <div class="panel-content" id="complete-features-content"
+               role="region" aria-label="Complete features"></div>
+        </div>
+      </div>
     </main>
 
   </div>

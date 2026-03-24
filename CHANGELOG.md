@@ -85,3 +85,6 @@ Applied the new color system to `web/static/css/main.css`. All color values were
 March 24th, 2026: main: brian
 Implemented persistent settings storage in `.kaibot/settings.json`. Created `src/settings.ts` with a `KaiBotSettings` interface and `loadSettings`/`saveSettings` helpers (following the same pattern as `featureDb.ts`). Updated `src/kai_bot.ts` to load saved settings at startup — the model resolution priority is now `KAI_MODEL` env var → `settings.json` → default `"claude-opus-4-6"`. The `model-changed` event handler in `kai_bot.ts` now persists the new model to `settings.json`, so any model selection made via the UI is remembered across bot restarts. Added 11 unit tests covering all edge cases (missing file, empty file, invalid JSON, JSON array, valid model/provider, overwrite, and round-trip).
 
+March 24th, 2026: main: brian
+Added a "Features" menu item to the left nav (between Dashboard and New Feature) with hotkey **F**. The hotkey for "New Feature" was changed from **F** to **N** throughout the nav and keyboard handler.
+

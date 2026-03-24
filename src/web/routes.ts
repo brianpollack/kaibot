@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { type IncomingMessage, type ServerResponse } from "http";
 import { extname, join, resolve } from "path";
 import { fileURLToPath } from "url";
@@ -79,6 +79,13 @@ export function handleRequest(
     return;
   }
 
+  // ── API: features list (pending + complete) ────────────────────────
+  if (pathname === "/api/features") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(getFeaturesList(server.projectDir)));
+    return;
+  }
+
   // ── Static files: /static/* and /vendor/* ──────────────────────────
   if (pathname.startsWith("/static/") || pathname.startsWith("/vendor/")) {
     serveStatic(pathname, res);
@@ -88,6 +95,128 @@ export function handleRequest(
   // ── 404 ────────────────────────────────────────────────────────────
   res.writeHead(404, { "Content-Type": "text/plain" });
   res.end("Not Found");
+}
+
+// ---------------------------------------------------------------------------
+// Features list
+// ---------------------------------------------------------------------------
+
+interface PendingFeature {
+  filename: string;
+  title: string;
+  status: "pending" | "hold";
+}
+
+interface CompleteFeature {
+  id: string;
+  description: string;
+  summary: string;
+  completedAt: string;
+  status: string;
+}
+
+interface FeaturesList {
+  pending: PendingFeature[];
+  complete: CompleteFeature[];
+}
+
+/**
+ * Extract a readable title from a feature markdown file's content.
+ * Skips the "Feature ID: xxx" header line and returns the first meaningful line.
+ */
+function extractFeatureTitle(filePath: string, fallback: string): string {
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    const lines = content.split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (trimmed.startsWith("Feature ID:")) continue;
+      if (trimmed.startsWith("##")) continue;
+      // Strip leading markdown heading markers
+      const clean = trimmed.replace(/^#+\s*/, "");
+      if (clean) return clean.length > 80 ? clean.slice(0, 80) + "…" : clean;
+    }
+  } catch {
+    // Fall through to filename
+  }
+  return fallback;
+}
+
+/** Read all pending and complete features from the project's features directories. */
+function getFeaturesList(projectDir: string): FeaturesList {
+  const pending: PendingFeature[] = [];
+  const complete: CompleteFeature[] = [];
+
+  // Pending: features/*.md (root level)
+  const featuresDir = join(projectDir, "features");
+  if (existsSync(featuresDir)) {
+    try {
+      for (const filename of readdirSync(featuresDir)) {
+        if (!filename.endsWith(".md")) continue;
+        const fallback = filename.replace(/\.md$/, "").replace(/_/g, " ");
+        pending.push({
+          filename,
+          title: extractFeatureTitle(join(featuresDir, filename), fallback),
+          status: "pending",
+        });
+      }
+    } catch {
+      // Ignore unreadable directories
+    }
+  }
+
+  // Pending (hold): features/hold/*.md
+  const holdDir = join(projectDir, "features", "hold");
+  if (existsSync(holdDir)) {
+    try {
+      for (const filename of readdirSync(holdDir)) {
+        if (!filename.endsWith(".md")) continue;
+        const fallback = filename.replace(/\.md$/, "").replace(/_/g, " ");
+        pending.push({
+          filename,
+          title: extractFeatureTitle(join(holdDir, filename), fallback),
+          status: "hold",
+        });
+      }
+    } catch {
+      // Ignore unreadable directories
+    }
+  }
+
+  // Complete: features/log/*.json
+  const logDir = join(projectDir, "features", "log");
+  if (existsSync(logDir)) {
+    try {
+      for (const filename of readdirSync(logDir)) {
+        if (!filename.endsWith(".json")) continue;
+        try {
+          const raw = readFileSync(join(logDir, filename), "utf-8");
+          const data = JSON.parse(raw) as Record<string, unknown>;
+          complete.push({
+            id: String(data["id"] ?? filename.replace(/\.json$/, "")),
+            description: String(data["description"] ?? ""),
+            summary: String(data["summary"] ?? ""),
+            completedAt: String(data["completedAt"] ?? ""),
+            status: String(data["status"] ?? "unknown"),
+          });
+        } catch {
+          // Skip malformed log files
+        }
+      }
+    } catch {
+      // Ignore unreadable directories
+    }
+  }
+
+  // Sort complete features newest first
+  complete.sort((a, b) => {
+    const ta = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+    const tb = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+    return tb - ta;
+  });
+
+  return { pending, complete };
 }
 
 // ---------------------------------------------------------------------------

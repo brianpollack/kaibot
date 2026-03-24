@@ -625,6 +625,114 @@ function openModelSelector() {
 }
 
 // ---------------------------------------------------------------------------
+// View switching — Dashboard vs Features
+// ---------------------------------------------------------------------------
+
+var currentView = "dashboard";
+
+function showDashboardView() {
+  var dock = document.getElementById("dock-container");
+  var featuresView = document.getElementById("features-view");
+  if (dock) dock.style.display = "";
+  if (featuresView) featuresView.style.display = "none";
+  currentView = "dashboard";
+
+  // Update nav active states
+  var navDash = document.getElementById("nav-dashboard");
+  var navFeatures = document.getElementById("nav-features");
+  if (navDash) navDash.classList.add("active");
+  if (navFeatures) navFeatures.classList.remove("active");
+}
+
+function showFeaturesView() {
+  var dock = document.getElementById("dock-container");
+  var featuresView = document.getElementById("features-view");
+  if (dock) dock.style.display = "none";
+  if (featuresView) featuresView.style.display = "";
+  currentView = "features";
+
+  // Update nav active states
+  var navDash = document.getElementById("nav-dashboard");
+  var navFeatures = document.getElementById("nav-features");
+  if (navDash) navDash.classList.remove("active");
+  if (navFeatures) navFeatures.classList.add("active");
+
+  // Load features data
+  loadFeaturesData();
+  makeDraggable("drag-features", "panel-pending", "vertical");
+}
+
+// ---------------------------------------------------------------------------
+// Features list rendering
+// ---------------------------------------------------------------------------
+
+function formatDate(isoString) {
+  if (!isoString) return "";
+  try {
+    var d = new Date(isoString);
+    return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch (e) {
+    return isoString;
+  }
+}
+
+function renderPendingFeatures(items) {
+  if (!items || items.length === 0) {
+    return '<div class="empty-state">(no pending features)</div>';
+  }
+  return items.map(function (item) {
+    return (
+      '<div class="feature-list-item">' +
+        '<span class="feature-list-badge ' + escHtml(item.status) + '">' + escHtml(item.status) + '</span>' +
+        '<div class="feature-list-body">' +
+          '<div class="feature-list-title">' + escHtml(item.title) + '</div>' +
+          '<div class="feature-list-meta">' + escHtml(item.filename) + '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join("");
+}
+
+function renderCompleteFeatures(items) {
+  if (!items || items.length === 0) {
+    return '<div class="empty-state">(no complete features)</div>';
+  }
+  return items.map(function (item) {
+    var desc = item.description || item.summary || "";
+    var maxDesc = desc.length > 100 ? desc.slice(0, 100) + "…" : desc;
+    return (
+      '<div class="feature-list-item">' +
+        '<span class="feature-list-badge ' + escHtml(item.status) + '">' + escHtml(item.status) + '</span>' +
+        '<div class="feature-list-body">' +
+          '<div class="feature-list-title">' + escHtml(maxDesc) + '</div>' +
+          '<div class="feature-list-meta">' + escHtml(formatDate(item.completedAt)) + '</div>' +
+          (item.summary ? '<div class="feature-list-summary">' + escHtml(item.summary.slice(0, 120)) + '</div>' : '') +
+        '</div>' +
+      '</div>'
+    );
+  }).join("");
+}
+
+function loadFeaturesData() {
+  var $pending = document.getElementById("pending-content");
+  var $complete = document.getElementById("complete-features-content");
+
+  if ($pending) $pending.innerHTML = '<div class="empty-state">Loading…</div>';
+  if ($complete) $complete.innerHTML = '<div class="empty-state">Loading…</div>';
+
+  fetch("/api/features")
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if ($pending) $pending.innerHTML = renderPendingFeatures(data.pending);
+      if ($complete) $complete.innerHTML = renderCompleteFeatures(data.complete);
+    })
+    .catch(function () {
+      if ($pending) $pending.innerHTML = '<div class="empty-state">(error loading features)</div>';
+      if ($complete) $complete.innerHTML = '<div class="empty-state">(error loading features)</div>';
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Keyboard shortcuts
 // ---------------------------------------------------------------------------
 
@@ -636,7 +744,18 @@ document.addEventListener("keydown", function (e) {
   switch (e.key.toLowerCase()) {
     case "d":
       e.preventDefault();
+      showDashboardView();
       break;
+    case "f":
+      e.preventDefault();
+      showFeaturesView();
+      break;
+    case "n": {
+      e.preventDefault();
+      var navFeature = document.getElementById("nav-feature");
+      if (navFeature) navFeature.click();
+      break;
+    }
     case "m":
       e.preventDefault();
       openModelSelector();
@@ -649,6 +768,18 @@ document.addEventListener("click", function (e) {
   if (trigger && trigger.contains(e.target)) {
     e.preventDefault();
     openModelSelector();
+  }
+
+  var navDash = document.getElementById("nav-dashboard");
+  if (navDash && navDash.contains(e.target)) {
+    e.preventDefault();
+    showDashboardView();
+  }
+
+  var navFeatures = document.getElementById("nav-features");
+  if (navFeatures && navFeatures.contains(e.target)) {
+    e.preventDefault();
+    showFeaturesView();
   }
 });
 
