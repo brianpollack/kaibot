@@ -1,0 +1,32 @@
+{
+  "id": "z_xXPSmU",
+  "requestedAt": "2026-03-24T15:04:11.167Z",
+  "completedAt": "2026-03-24T15:07:54.415Z",
+  "executionTimeMs": 183130,
+  "model": "claude-sonnet-4-6",
+  "tokensIn": 16,
+  "tokensOut": 9700,
+  "cacheReadTokens": 390209,
+  "cacheWriteTokens": 49808,
+  "totalCostUsd": 0.4493907,
+  "numTurns": 19,
+  "filesChanged": [
+    "\"features/complete/model selection.md\"",
+    "CHANGELOG.md",
+    "web/static/html/client.js"
+  ],
+  "testsAdded": [],
+  "gitBranch": "main",
+  "gitCommitHash": "5b74e0ec4dad0a18aedd35b6ae47da17bedff381",
+  "description": "When using the WebUI to change model, I can't click on the menu item.  I can only select it with the keyboard.  Fix to enable common web usage, mouse over, click, etc",
+  "planPoints": [
+    "1. Refactor `renderPopupItems()` to remove the per-item click/mouseenter listeners it re-attaches each render — removed per-item listener attachment from `renderPopupItems()` in `web/static/html/client.js`",
+    "2. Add delegated `click` and `mouseover` listeners to the menu element once inside `showPopupMenu()`, so clicks survive innerHTML re-renders — added delegated listeners to the stable `menu` element in `showPopupMenu()` in `web/static/html/client.js`"
+  ],
+  "source": "file",
+  "linearIssueId": null,
+  "linearIdentifier": null,
+  "status": "success",
+  "errorMessage": null,
+  "summary": "The model selector popup in the WebUI was fixed to respond to mouse clicks by switching from per-item event listeners to event delegation. The original issue was that `renderPopupItems()` was replacing the entire menu's HTML on every mouseover, destroying the DOM elements mid-click. The fix removes the per-item listeners and instead attaches stable `click` and `mouseover` listeners to the menu container itself, which now survive the HTML re-renders and allow normal mouse interactions."
+}

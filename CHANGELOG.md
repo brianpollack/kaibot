@@ -79,3 +79,6 @@ Fixed the Web UI dashboard panels (Thinking, Commands, File Operations, Plan, Fe
 March 24th, 2026: main: brian
 The model selector popup couldn't be clicked because `renderPopupItems()` replaced the entire `menu.innerHTML` on every `mouseenter`, destroying the clicked item's DOM element mid-click (between `mousedown` and `mouseup`). Fixed by switching to event delegation: per-item click/mouseenter listeners were removed from `renderPopupItems()` and replaced with a single `click` + `mouseover` listener attached once to the stable `menu` element inside `showPopupMenu()`. These delegated listeners survive innerHTML re-renders, so mouse hover and mouse click now both work as expected.
 
+March 24th, 2026: main: brian
+Applied the new color system to `web/static/css/main.css`. All color values were updated:
+

@@ -38,13 +38,7 @@ export function renderMainPage(server: WebServer): string {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>KaiBot — ${esc(projectName)}</title>
 
-  <!-- rc-dock: React + ReactDOM + rc-dock from CDN -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/rc-dock@3/dist/rc-dock.css" />
-  <script src="https://unpkg.com/rc-dock@3/dist/rc-dock.min.js"></script>
-
-  <!-- App styles -->
+  <!-- App styles (no external CDN dependencies) -->
   <link rel="stylesheet" href="/static/css/main.css" />
 </head>
 <body>
@@ -116,8 +110,64 @@ export function renderMainPage(server: WebServer): string {
       </div>
     </nav>
 
-    <!-- Content area — rc-dock container -->
+    <!-- ── Dashboard panels (resizable, no external dependencies) ──── -->
     <main id="dock-container" role="main" aria-label="Dashboard panels">
+
+      <!-- Left column: Thinking on top, Commands + File Ops below -->
+      <div id="panels-left">
+        <div class="panel" id="panel-thinking">
+          <div class="panel-tab-bar">
+            <span class="panel-tab">&#x1F4AD; Thinking</span>
+          </div>
+          <div class="panel-content" id="thinking-content"
+               role="region" aria-label="Claude thinking output"></div>
+        </div>
+        <div class="resize-handle resize-handle-h" id="drag-thinking-bottom"
+             aria-hidden="true" title="Drag to resize"></div>
+        <div id="panels-bottom-row">
+          <div class="panel" id="panel-commands">
+            <div class="panel-tab-bar">
+              <span class="panel-tab">&#x26A1; Commands</span>
+            </div>
+            <div class="panel-content" id="commands-content"
+                 role="region" aria-label="Commands panel"></div>
+          </div>
+          <div class="resize-handle resize-handle-v" id="drag-commands-fileops"
+               aria-hidden="true" title="Drag to resize"></div>
+          <div class="panel" id="panel-fileops">
+            <div class="panel-tab-bar">
+              <span class="panel-tab">&#x1F4C4; File Operations</span>
+            </div>
+            <div class="panel-content" id="fileops-content"
+                 role="region" aria-label="File operations panel"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main vertical resize handle -->
+      <div class="resize-handle resize-handle-v" id="drag-main"
+           aria-hidden="true" title="Drag to resize"></div>
+
+      <!-- Right column: Feature Status + Plan -->
+      <div id="panels-right">
+        <div class="panel" id="panel-status">
+          <div class="panel-tab-bar">
+            <span class="panel-tab">&#x1F4E1; Feature Status</span>
+          </div>
+          <div class="panel-content" id="status-content"
+               role="region" aria-label="Feature status panel"></div>
+        </div>
+        <div class="resize-handle resize-handle-h" id="drag-status-plan"
+             aria-hidden="true" title="Drag to resize"></div>
+        <div class="panel" id="panel-plan">
+          <div class="panel-tab-bar">
+            <span class="panel-tab">&#x1F4CB; Plan</span>
+          </div>
+          <div class="panel-content" id="plan-content"
+               role="region" aria-label="Plan panel"></div>
+        </div>
+      </div>
+
     </main>
 
   </div>
@@ -127,7 +177,7 @@ export function renderMainPage(server: WebServer): string {
     <span id="status-message" aria-live="polite">Connecting…</span>
   </footer>
 
-  <!-- Client-side JavaScript -->
+  <!-- Client-side JavaScript (no external CDN dependencies) -->
   <script src="/static/html/client.js"></script>
 
 </body>

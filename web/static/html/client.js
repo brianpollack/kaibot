@@ -1,6 +1,7 @@
 /* =========================================================================
    KaiBot Web UI — client.js
-   Client-side JavaScript for WebSocket real-time updates and rc-dock panels.
+   Client-side JavaScript for WebSocket real-time updates and dashboard panels.
+   No external CDN dependencies — plain DOM manipulation only.
    ========================================================================= */
 
 "use strict";
@@ -26,7 +27,7 @@ let state = {
 };
 
 // ---------------------------------------------------------------------------
-// DOM references
+// DOM references — header / footer
 // ---------------------------------------------------------------------------
 
 const $botStatus    = document.getElementById("bot-status");
@@ -34,36 +35,27 @@ const $projectDir   = document.getElementById("project-dir");
 const $currentModel = document.getElementById("current-model");
 const $todaySpend   = document.getElementById("today-spend");
 const $statusMsg    = document.getElementById("status-message");
-const $dockContainer = document.getElementById("dock-container");
+
+// Panel content areas
+const $thinkingContent  = document.getElementById("thinking-content");
+const $commandsContent  = document.getElementById("commands-content");
+const $fileopsContent   = document.getElementById("fileops-content");
+const $statusContent    = document.getElementById("status-content");
+const $planContent      = document.getElementById("plan-content");
 
 // ---------------------------------------------------------------------------
-// Panel rendering helpers
+// Utility
 // ---------------------------------------------------------------------------
 
 function escHtml(str) {
-  const div = document.createElement("div");
+  var div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
 }
 
 // ---------------------------------------------------------------------------
-// Runtime timer — ticks every second to update the Feature Status panel
+// Panel content renderers
 // ---------------------------------------------------------------------------
-
-let runtimeTimer = null;
-
-function startRuntimeTimer() {
-  if (runtimeTimer) return;
-  runtimeTimer = setInterval(function () {
-    // Only re-render the feature-status panel if a feature is processing
-    if (state.featureStartTime && dockLayout) {
-      var tab = dockLayout.find("feature-status");
-      if (tab) {
-        dockLayout.updateTab("feature-status", null, true);
-      }
-    }
-  }, 1000);
-}
 
 function formatElapsed(startTime) {
   if (!startTime) return "—";
@@ -129,44 +121,45 @@ function renderFeatureStatusContent() {
 }
 
 function renderThinkingContent() {
-  const lines = state.thinkingLines;
+  var lines = state.thinkingLines;
   if (lines.length === 0) {
     return '<div class="empty-state">(no thinking output yet)</div>';
   }
   return lines
-    .map((line) =>
-      line
+    .map(function (line) {
+      return line
         ? '<div class="thinking-line">' + escHtml(line) + "</div>"
-        : '<div class="thinking-line empty">&middot;</div>'
-    )
+        : '<div class="thinking-line empty">&middot;</div>';
+    })
     .join("");
 }
 
 function renderCommandsContent() {
-  const cmds = state.commands;
+  var cmds = state.commands;
   if (cmds.length === 0) {
     return '<div class="empty-state">(no commands yet)</div>';
   }
   return cmds
-    .map(
-      (cmd) =>
+    .map(function (cmd) {
+      return (
         '<div class="command-entry ' +
         (cmd.active ? "active" : "inactive") +
         '">' +
         escHtml(cmd.command) +
         "</div>"
-    )
+      );
+    })
     .join("");
 }
 
 function renderFileOpsContent() {
-  const ops = state.fileOps;
+  var ops = state.fileOps;
   if (ops.length === 0) {
     return '<div class="empty-state">(no file operations yet)</div>';
   }
   return ops
-    .map(
-      (op) =>
+    .map(function (op) {
+      return (
         '<div class="file-op">' +
         '<span class="file-op-type ' + op.type + '">' + op.type.toUpperCase() + "</span>" +
         '<span class="file-op-path">' + escHtml(op.path) + "</span>" +
@@ -174,15 +167,16 @@ function renderFileOpsContent() {
           ? '<span class="file-op-preview">' + escHtml(op.preview) + "</span>"
           : "") +
         "</div>"
-    )
+      );
+    })
     .join("");
 }
 
 function renderPlanContent() {
-  const lines = state.planLines;
-  const isComplete = state.featureStage === "complete";
+  var lines = state.planLines;
+  var isComplete = state.featureStage === "complete";
 
-  let html = "";
+  var html = "";
 
   if (state.featureName) {
     html += '<div class="feature-name">' + escHtml(state.featureName);
@@ -199,8 +193,8 @@ function renderPlanContent() {
     html += '<div class="empty-state">(no plan yet)</div>';
   } else {
     lines.forEach(function (line) {
-      const cls = line.checked ? "checked" : "unchecked";
-      const icon = line.checked ? "&#x2705;" : "&#x2B1C;";
+      var cls = line.checked ? "checked" : "unchecked";
+      var icon = line.checked ? "&#x2705;" : "&#x2B1C;";
       html +=
         '<div class="plan-step ' + cls + '">' +
         '<span class="plan-checkbox">' + icon + "</span>" +
@@ -223,205 +217,130 @@ function renderPlanContent() {
 }
 
 // ---------------------------------------------------------------------------
-// rc-dock layout setup
+// Panel content updater — auto-scrolls console-like panels to bottom
 // ---------------------------------------------------------------------------
 
-let dockLayout = null;
-
-/** Tab content factory — returns a React element for each tab ID. */
-function loadTab(tabData) {
-  const id = tabData.id;
-  let contentFn;
-
-  switch (id) {
-    case "feature-status":
-      contentFn = renderFeatureStatusContent;
-      break;
-    case "thinking":
-      contentFn = renderThinkingContent;
-      break;
-    case "commands":
-      contentFn = renderCommandsContent;
-      break;
-    case "fileops":
-      contentFn = renderFileOpsContent;
-      break;
-    case "plan":
-      contentFn = renderPlanContent;
-      break;
-    default:
-      contentFn = function () {
-        return "<div>Unknown panel</div>";
-      };
+function updatePanelContent(el, renderFn) {
+  if (!el) return;
+  // Preserve scroll-to-bottom behavior if user is already near the bottom
+  var isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  el.innerHTML = renderFn();
+  if (isNearBottom) {
+    el.scrollTop = el.scrollHeight;
   }
-
-  return {
-    ...tabData,
-    content: React.createElement(PanelWrapper, { id: id, renderFn: contentFn }),
-  };
 }
 
-/**
- * Global event target used to notify PanelWrapper instances that state has
- * changed and they should re-render.  Dispatched from updateDOM().
- */
-var panelBus = new EventTarget();
+// ---------------------------------------------------------------------------
+// Runtime timer — ticks every second to keep elapsed time current
+// ---------------------------------------------------------------------------
 
-/** Simple React component wrapper that renders HTML content and re-renders on state changes. */
-class PanelWrapper extends React.Component {
-  constructor(props) {
-    super(props);
-    this._ref = React.createRef();
-    this._onStateChange = this._onStateChange.bind(this);
-  }
+var runtimeTimer = null;
 
-  componentDidMount() {
-    panelBus.addEventListener("state-change", this._onStateChange);
-    this._update();
-  }
-
-  componentWillUnmount() {
-    panelBus.removeEventListener("state-change", this._onStateChange);
-  }
-
-  componentDidUpdate() {
-    this._update();
-  }
-
-  _onStateChange() {
-    this.forceUpdate();
-  }
-
-  _update() {
-    if (this._ref.current) {
-      var el = this._ref.current;
-      // Check if user is scrolled near the bottom before updating
-      var isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-      el.innerHTML = this.props.renderFn();
-      // Auto-scroll to bottom for console-like panels if user was near bottom
-      if (isNearBottom) {
-        el.scrollTop = el.scrollHeight;
-      }
+function startRuntimeTimer() {
+  if (runtimeTimer) return;
+  runtimeTimer = setInterval(function () {
+    if (state.featureStartTime && $statusContent) {
+      // Re-render only the status panel (it contains the elapsed timer)
+      $statusContent.innerHTML = renderFeatureStatusContent();
     }
-  }
-
-  render() {
-    return React.createElement("div", {
-      ref: this._ref,
-      className: "panel-content",
-      role: "region",
-      "aria-label": this.props.id + " panel",
-    });
-  }
-}
-
-/** The default dock layout — four panels arranged in a split view. */
-const defaultLayout = {
-  dockbox: {
-    mode: "horizontal",
-    children: [
-      {
-        mode: "vertical",
-        size: 600,
-        children: [
-          {
-            tabs: [
-              { id: "thinking", title: "\uD83D\uDCAD Thinking", closable: false },
-            ],
-            size: 400,
-          },
-          {
-            mode: "horizontal",
-            size: 300,
-            children: [
-              {
-                tabs: [
-                  { id: "commands", title: "\u26A1 Commands", closable: false },
-                ],
-                size: 300,
-              },
-              {
-                tabs: [
-                  { id: "fileops", title: "\uD83D\uDCC4 File Operations", closable: false },
-                ],
-                size: 300,
-              },
-            ],
-          },
-        ],
-      },
-      {
-        mode: "vertical",
-        size: 400,
-        children: [
-          {
-            tabs: [
-              { id: "feature-status", title: "\uD83D\uDCE1 Feature Status", closable: false },
-            ],
-            size: 200,
-          },
-          {
-            tabs: [
-              { id: "plan", title: "\uD83D\uDCCB Plan", closable: false },
-            ],
-            size: 400,
-          },
-        ],
-      },
-    ],
-  },
-};
-
-function initDock() {
-  if (!window.RcDock || !$dockContainer) return;
-
-  const DockLayout = RcDock.DockLayout;
-
-  const dockEl = React.createElement(DockLayout, {
-    ref: function (r) {
-      dockLayout = r;
-    },
-    defaultLayout: defaultLayout,
-    loadTab: loadTab,
-    style: { position: "absolute", left: 0, top: 0, right: 0, bottom: 0 },
-  });
-
-  ReactDOM.render(dockEl, $dockContainer);
+  }, 1000);
 }
 
 // ---------------------------------------------------------------------------
-// State update — DOM patching
+// DOM update — called on every WebSocket state message
 // ---------------------------------------------------------------------------
 
 function updateDOM() {
-  // Status badge
+  // Header badges
   if ($botStatus) {
     $botStatus.textContent = state.status.toUpperCase();
     $botStatus.className = "badge badge-" + state.status;
   }
-
-  // Header values
   if ($projectDir) $projectDir.textContent = state.projectDir;
   if ($currentModel) $currentModel.textContent = state.model;
   if ($todaySpend) $todaySpend.textContent = "$" + (state.todaySpend || 0).toFixed(2);
-
-  // Status message
   if ($statusMsg) $statusMsg.textContent = state.statusMessage || " ";
 
-  // Notify all PanelWrapper instances that state has changed so they re-render
-  panelBus.dispatchEvent(new Event("state-change"));
+  // Dashboard panels
+  updatePanelContent($thinkingContent,  renderThinkingContent);
+  updatePanelContent($commandsContent,  renderCommandsContent);
+  updatePanelContent($fileopsContent,   renderFileOpsContent);
+  updatePanelContent($statusContent,    renderFeatureStatusContent);
+  updatePanelContent($planContent,      renderPlanContent);
+}
+
+// ---------------------------------------------------------------------------
+// Drag-to-resize handles
+// ---------------------------------------------------------------------------
+
+/**
+ * Make a resize handle element drag to resize a target element.
+ * direction: "horizontal" resizes width; "vertical" resizes height.
+ */
+function makeDraggable(handleId, targetId, direction) {
+  var handle = document.getElementById(handleId);
+  if (!handle) return;
+
+  handle.addEventListener("mousedown", function (e) {
+    e.preventDefault();
+
+    var target = document.getElementById(targetId);
+    if (!target) return;
+
+    handle.classList.add("dragging");
+    document.body.style.cursor = direction === "horizontal" ? "col-resize" : "row-resize";
+    document.body.style.userSelect = "none";
+
+    var startPos = direction === "horizontal" ? e.clientX : e.clientY;
+    var rect = target.getBoundingClientRect();
+    var startSize = direction === "horizontal" ? rect.width : rect.height;
+
+    function onMove(e) {
+      var delta = (direction === "horizontal" ? e.clientX : e.clientY) - startPos;
+      var newSize = Math.max(80, startSize + delta);
+      if (direction === "horizontal") {
+        target.style.width = newSize + "px";
+        target.style.flex = "none";
+      } else {
+        target.style.height = newSize + "px";
+        target.style.flex = "none";
+      }
+    }
+
+    function onUp() {
+      handle.classList.remove("dragging");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+}
+
+function initResizeHandles() {
+  // Left column width vs right column
+  makeDraggable("drag-main", "panels-left", "horizontal");
+  // Thinking panel height vs bottom row
+  makeDraggable("drag-thinking-bottom", "panel-thinking", "vertical");
+  // Commands width vs file ops
+  makeDraggable("drag-commands-fileops", "panel-commands", "horizontal");
+  // Feature status height vs plan
+  makeDraggable("drag-status-plan", "panel-status", "vertical");
 }
 
 // ---------------------------------------------------------------------------
 // WebSocket connection
 // ---------------------------------------------------------------------------
 
-let ws = null;
-let reconnectTimer = null;
+var ws = null;
+var reconnectTimer = null;
 
 function connectWebSocket() {
-  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = protocol + "//" + location.host + "/ws";
+  var protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  var wsUrl = protocol + "//" + location.host + "/ws";
 
   ws = new WebSocket(wsUrl);
 
@@ -435,9 +354,9 @@ function connectWebSocket() {
 
   ws.onmessage = function (event) {
     try {
-      const msg = JSON.parse(event.data);
+      var msg = JSON.parse(event.data);
       if (msg.type === "state") {
-        state = { ...state, ...msg.data };
+        state = Object.assign({}, state, msg.data);
         updateDOM();
       }
     } catch (e) {
@@ -467,23 +386,9 @@ function scheduleReconnect() {
 // Reusable Popup Menu
 // ---------------------------------------------------------------------------
 
-/**
- * PopupMenu — keyboard (1-9, arrows, Enter, Escape) and mouse compatible.
- * Items are numbered 1–9; arrow keys scroll if the list exceeds 9 items.
- *
- * Usage:
- *   showPopupMenu({
- *     items: [{ id: "foo", label: "Foo", description: "...", active: false }],
- *     anchorEl: document.getElementById("trigger"),
- *     onSelect: function(item) { ... },
- *     onClose: function() { ... },
- *   });
- */
-
-let activePopup = null; // { el, onSelect, onClose, items, selectedIndex, scrollOffset }
+var activePopup = null; // { overlay, menu, items, selectedIndex, scrollOffset, onSelect, onClose }
 
 function showPopupMenu(opts) {
-  // Close any existing popup first
   closePopupMenu();
 
   var items = opts.items || [];
@@ -491,20 +396,19 @@ function showPopupMenu(opts) {
   var onSelect = opts.onSelect || function () {};
   var onClose = opts.onClose || function () {};
 
-  // Create overlay
+  // Overlay (click-outside to close)
   var overlay = document.createElement("div");
   overlay.className = "popup-overlay";
   overlay.addEventListener("click", function (e) {
     if (e.target === overlay) closePopupMenu();
   });
 
-  // Create menu container
+  // Menu container
   var menu = document.createElement("div");
   menu.className = "popup-menu";
   menu.setAttribute("role", "listbox");
   menu.setAttribute("tabindex", "-1");
 
-  // Position near anchor
   if (anchorEl) {
     var rect = anchorEl.getBoundingClientRect();
     menu.style.position = "fixed";
@@ -526,13 +430,9 @@ function showPopupMenu(opts) {
   };
 
   if (activePopup.selectedIndex < 0) activePopup.selectedIndex = 0;
-
   renderPopupItems();
 
-  // Use event delegation on the stable menu element so click/hover events
-  // survive the innerHTML replacement that renderPopupItems() performs on
-  // each hover update. Without delegation, re-rendering the menu on mouseenter
-  // destroys the item elements mid-click, preventing the click from firing.
+  // Event delegation so click/hover survive innerHTML replacement
   menu.addEventListener("click", function (e) {
     if (!activePopup) return;
     var item = e.target.closest(".popup-item");
@@ -567,20 +467,15 @@ function renderPopupItems() {
   var maxVisible = 9;
   var scrollOffset = activePopup.scrollOffset;
 
-  // Adjust scroll so selected item is visible
-  if (selected < scrollOffset) {
-    scrollOffset = selected;
-  } else if (selected >= scrollOffset + maxVisible) {
-    scrollOffset = selected - maxVisible + 1;
-  }
+  if (selected < scrollOffset) scrollOffset = selected;
+  else if (selected >= scrollOffset + maxVisible) scrollOffset = selected - maxVisible + 1;
   activePopup.scrollOffset = scrollOffset;
 
   var visibleItems = items.slice(scrollOffset, scrollOffset + maxVisible);
   var html = "";
 
-  // Scroll-up indicator
   if (scrollOffset > 0) {
-    html += '<div class="popup-scroll-indicator">▲ more</div>';
+    html += '<div class="popup-scroll-indicator">&#x25B2; more</div>';
   }
 
   visibleItems.forEach(function (item, i) {
@@ -603,9 +498,8 @@ function renderPopupItems() {
     html += "</div>";
   });
 
-  // Scroll-down indicator
   if (scrollOffset + maxVisible < items.length) {
-    html += '<div class="popup-scroll-indicator">▼ more</div>';
+    html += '<div class="popup-scroll-indicator">&#x25BC; more</div>';
   }
 
   menu.innerHTML = html;
@@ -621,7 +515,7 @@ function closePopupMenu() {
   if (onClose) onClose();
 }
 
-// Global keydown handler for popup menu
+// Global keydown for popup menu
 document.addEventListener("keydown", function (e) {
   if (!activePopup) return;
 
@@ -633,25 +527,18 @@ document.addEventListener("keydown", function (e) {
       e.preventDefault();
       closePopupMenu();
       break;
-
     case "ArrowUp":
       e.preventDefault();
       activePopup.selectedIndex =
-        activePopup.selectedIndex > 0
-          ? activePopup.selectedIndex - 1
-          : items.length - 1;
+        activePopup.selectedIndex > 0 ? activePopup.selectedIndex - 1 : items.length - 1;
       renderPopupItems();
       break;
-
     case "ArrowDown":
       e.preventDefault();
       activePopup.selectedIndex =
-        activePopup.selectedIndex < items.length - 1
-          ? activePopup.selectedIndex + 1
-          : 0;
+        activePopup.selectedIndex < items.length - 1 ? activePopup.selectedIndex + 1 : 0;
       renderPopupItems();
       break;
-
     case "Enter":
       e.preventDefault();
       if (items[activePopup.selectedIndex]) {
@@ -659,9 +546,7 @@ document.addEventListener("keydown", function (e) {
         closePopupMenu();
       }
       break;
-
-    default:
-      // Number keys 1-9 select visible items
+    default: {
       var num = parseInt(e.key, 10);
       if (num >= 1 && num <= maxVisible) {
         e.preventDefault();
@@ -672,6 +557,7 @@ document.addEventListener("keydown", function (e) {
         }
       }
       break;
+    }
   }
 });
 
@@ -682,7 +568,7 @@ document.addEventListener("keydown", function (e) {
 var cachedModels = null;
 
 function openModelSelector() {
-  if (activePopup) return; // Already open
+  if (activePopup) return;
 
   var trigger = document.getElementById("model-trigger");
 
@@ -712,7 +598,6 @@ function openModelSelector() {
     if (trigger) trigger.setAttribute("aria-expanded", "true");
   }
 
-  // Use cached models or fetch fresh
   if (cachedModels) {
     showWithModels(cachedModels);
   } else {
@@ -723,39 +608,32 @@ function openModelSelector() {
         showWithModels(models);
       })
       .catch(function () {
-        // Fallback: show current model only
         showWithModels([{ id: state.model, description: "Current model" }]);
       });
   }
 }
 
 // ---------------------------------------------------------------------------
-// Keyboard shortcuts
+// Keyboard shortcuts (global — not in popup mode)
 // ---------------------------------------------------------------------------
 
 document.addEventListener("keydown", function (e) {
-  // Don't intercept if popup is open (handled by popup keydown)
   if (activePopup) return;
-  // Don't intercept if user is typing in an input
   if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 
   switch (e.key.toLowerCase()) {
     case "d":
-      // Dashboard — already on it
       e.preventDefault();
       break;
     case "m":
       e.preventDefault();
       openModelSelector();
       break;
-    case "q":
-      // Could send a quit command via WebSocket in the future
-      break;
   }
 });
 
-// Click handler for model trigger in top bar
+// Click handler for model trigger
 document.addEventListener("click", function (e) {
   var trigger = document.getElementById("model-trigger");
   if (trigger && trigger.contains(e.target)) {
@@ -768,20 +646,18 @@ document.addEventListener("click", function (e) {
 // Initialization
 // ---------------------------------------------------------------------------
 
-// Fetch initial state, then set up WebSocket for live updates
+// Seed state from REST then switch to WebSocket for live updates
 fetch("/api/state")
-  .then(function (res) {
-    return res.json();
-  })
+  .then(function (res) { return res.json(); })
   .then(function (data) {
-    state = { ...state, ...data };
+    state = Object.assign({}, state, data);
     updateDOM();
   })
   .catch(function () {
-    // Will get state via WebSocket instead
+    // State will arrive via WebSocket
   })
   .finally(function () {
-    initDock();
+    initResizeHandles();
     connectWebSocket();
     startRuntimeTimer();
   });
