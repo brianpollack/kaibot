@@ -211,6 +211,10 @@ export class KaiBot {
 
       const summary = await generateSummary(feature, this.projectDir);
 
+      // Capture timestamped conversation history and file activity before reset
+      const conversationHistory = uiStore.getConversationSnapshot();
+      const fileActivity = uiStore.getFileActivitySnapshot();
+
       appendFeatureRecord(this.projectDir, {
         id: generateFeatureId(),
         requestedAt: issue.createdAt,
@@ -236,6 +240,8 @@ export class KaiBot {
         errorMessage: null,
         title: featureTitle || issue.title,
         summary,
+        conversationHistory,
+        fileActivity,
       });
 
       uiStore.setStatusMessage(`Complete: ${issueIdentifier}`);
@@ -357,6 +363,10 @@ export class KaiBot {
 
       const summary = await generateSummary(feature, this.projectDir);
 
+      // Capture timestamped conversation history and file activity before reset
+      const conversationHistory = uiStore.getConversationSnapshot();
+      const fileActivity = uiStore.getFileActivitySnapshot();
+
       const record = {
         id: featureId,
         requestedAt,
@@ -382,6 +392,8 @@ export class KaiBot {
         errorMessage: null,
         title: featureTitle,
         summary,
+        conversationHistory,
+        fileActivity,
       };
 
       appendFeatureRecord(this.projectDir, record);

@@ -23,6 +23,7 @@ const BUILTIN_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep", "Bash"];
 interface SecuritySettings {
   sandbox: { enabled: boolean; autoAllowBashIfSandboxed: boolean };
   permissions: { defaultMode: string; allow: string[] };
+  autoMemoryEnabled: boolean;
 }
 
 function buildSecuritySettings(): SecuritySettings {
@@ -42,6 +43,7 @@ function buildSecuritySettings(): SecuritySettings {
         "Bash(*)",
       ],
     },
+    autoMemoryEnabled: true,
   };
 }
 
@@ -108,7 +110,7 @@ export class KaiClient {
 
     this.projectDir = resolve(projectDir);
     this.model = model;
-    this.settingsFile = join(this.projectDir, ".claude_settings.json");
+    this.settingsFile = join(this.projectDir, ".kaibot", "settings.json");
   }
 
   /**
@@ -117,7 +119,7 @@ export class KaiClient {
    * mkdirSync is a no-op if the directory already exists.
    */
   init(): void {
-    mkdirSync(this.projectDir, { recursive: true });
+    mkdirSync(join(this.projectDir, ".kaibot"), { recursive: true });
     const settings = buildSecuritySettings();
     writeFileSync(this.settingsFile, JSON.stringify(settings, null, 2));
   }
@@ -172,6 +174,7 @@ export class KaiClient {
         PreToolUse: [{ matcher: "Bash", hooks: [bashSecurityHook] }],
       },
       maxTurns: 1000,
+      persistSession: true,
     };
   }
 }

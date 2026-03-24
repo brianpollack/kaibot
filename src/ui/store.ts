@@ -18,6 +18,8 @@ export interface FileOp {
   type: "read" | "write" | "edit";
   path: string;
   preview: string;
+  /** Unix ms timestamp when the file operation was recorded. */
+  timestamp: number;
 }
 
 export interface CommandEntry {
@@ -55,6 +57,25 @@ export interface ConversationItem {
   agentType?: string;
   /** For "agent" items: the short description passed to the subagent. */
   agentDescription?: string;
+}
+
+/** Serializable conversation entry written to log JSON files. */
+export interface ConversationLogEntry {
+  type: ConversationItemType;
+  content: string;
+  /** ISO 8601 timestamp */
+  timestamp: string;
+  agentType?: string;
+  agentDescription?: string;
+}
+
+/** Serializable file-activity entry written to log JSON files. */
+export interface FileActivityLogEntry {
+  type: "read" | "write" | "edit";
+  path: string;
+  preview: string;
+  /** ISO 8601 timestamp */
+  timestamp: string;
 }
 
 export interface UIState {
@@ -240,8 +261,9 @@ class UIStore extends EventEmitter {
 
   // -- File ops -----------------------------------------------------------
 
-  pushFileOp(op: FileOp): void {
-    this.state.fileOps = [...this.state.fileOps, op].slice(-MAX_FILE_OPS);
+  pushFileOp(op: Omit<FileOp, "timestamp"> & { timestamp?: number }): void {
+    const stamped: FileOp = { ...op, timestamp: op.timestamp ?? Date.now() };
+    this.state.fileOps = [...this.state.fileOps, stamped].slice(-MAX_FILE_OPS);
     this.emitChange();
   }
 
@@ -512,6 +534,29 @@ class UIStore extends EventEmitter {
     this.state.isScanningTechDebt = false;
     this.state.statusMessage = "";
     this.emitChange();
+  }
+
+  // -- Snapshots for log files --------------------------------------------
+
+  /** Return a serializable snapshot of conversation history with ISO timestamps. */
+  getConversationSnapshot(): ConversationLogEntry[] {
+    return this.state.conversationItems.map((item) => ({
+      type: item.type,
+      content: item.content,
+      timestamp: item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString(),
+      ...(item.agentType ? { agentType: item.agentType } : {}),
+      ...(item.agentDescription ? { agentDescription: item.agentDescription } : {}),
+    }));
+  }
+
+  /** Return a serializable snapshot of file activity with ISO timestamps. */
+  getFileActivitySnapshot(): FileActivityLogEntry[] {
+    return this.state.fileOps.map((op) => ({
+      type: op.type,
+      path: op.path,
+      preview: op.preview,
+      timestamp: new Date(op.timestamp).toISOString(),
+    }));
   }
 
   // -- Internal -----------------------------------------------------------
