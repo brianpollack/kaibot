@@ -139,6 +139,8 @@ interface ApiModelListResponse {
 // Live model fetching
 // ---------------------------------------------------------------------------
 
+import https from "node:https";
+
 const MODELS_ENDPOINT = "https://api.anthropic.com/v1/models";
 const OPENROUTER_MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models";
 
@@ -177,42 +179,62 @@ interface OpenRouterModelListResponse {
 }
 
 /**
- * Fetches available models from the OpenRouter API.
+ * Fetches available models from the OpenRouter API using Node's https module.
  * Filters to only Claude/Anthropic models for relevance.
  */
-export async function fetchOpenRouterModels(apiKey: string): Promise<ApiModel[]> {
-  const response = await fetch(OPENROUTER_MODELS_ENDPOINT, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-    },
+export function fetchOpenRouterModels(apiKey: string): Promise<ApiModel[]> {
+  return new Promise((resolve, reject) => {
+    const req = https.get(
+      OPENROUTER_MODELS_ENDPOINT,
+      { headers: { Authorization: `Bearer ${apiKey}` } },
+      (res) => {
+        const chunks: Buffer[] = [];
+
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("error", reject);
+        res.on("end", () => {
+          const body = Buffer.concat(chunks).toString("utf-8");
+
+          if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+            reject(new Error(`OpenRouter API error (${res.statusCode}): ${body}`));
+            return;
+          }
+
+          let json: OpenRouterModelListResponse;
+          try {
+            json = JSON.parse(body) as OpenRouterModelListResponse;
+          } catch {
+            reject(new Error("Failed to parse OpenRouter API response as JSON"));
+            return;
+          }
+
+          if (!json.data || !Array.isArray(json.data)) {
+            reject(new Error("Unexpected OpenRouter API response: missing data array"));
+            return;
+          }
+
+          // Filter to anthropic/claude models only for relevance
+          const filtered = json.data
+            .filter((m) => m.id.startsWith("anthropic/claude"))
+            .map((m) => ({
+              type: "model" as const,
+              id: m.id,
+              display_name: m.name || m.id,
+              created_at: "",
+            }));
+
+          if (filtered.length === 0) {
+            reject(new Error("No Claude models found in OpenRouter response"));
+            return;
+          }
+
+          resolve(filtered);
+        });
+      },
+    );
+
+    req.on("error", reject);
   });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenRouter API error (${response.status}): ${body}`);
-  }
-
-  const json = (await response.json()) as OpenRouterModelListResponse;
-
-  if (!json.data || !Array.isArray(json.data)) {
-    throw new Error("Unexpected OpenRouter API response: missing data array");
-  }
-
-  // Filter to anthropic/claude models only for relevance
-  const filtered = json.data
-    .filter((m) => m.id.startsWith("anthropic/claude"))
-    .map((m) => ({
-      type: "model",
-      id: m.id,
-      display_name: m.name || m.id,
-      created_at: "",
-    }));
-
-  if (filtered.length === 0) {
-    throw new Error("No Claude models found in OpenRouter response");
-  }
-
-  return filtered;
 }
 
 /**

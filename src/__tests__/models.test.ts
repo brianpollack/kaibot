@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { EventEmitter } from "node:events";
 
 import {
   MODELS,
@@ -6,6 +7,7 @@ import {
   MODEL_PRICING,
   getPricing,
   fetchModels,
+  fetchOpenRouterModels,
   printModels,
   type ApiModel,
 } from "../models.js";
@@ -146,6 +148,86 @@ describe("fetchModels", () => {
     await expect(fetchModels("bad-key")).rejects.toThrow(
       "Anthropic API error (401)",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchOpenRouterModels (uses node:https)
+// ---------------------------------------------------------------------------
+
+vi.mock("node:https", () => ({
+  default: { get: vi.fn() },
+}));
+
+import https from "node:https";
+
+describe("fetchOpenRouterModels", () => {
+  afterEach(() => {
+    vi.mocked(https.get).mockReset();
+  });
+
+  /** Helper: create a fake IncomingMessage that emits the given body. */
+  function fakeResponse(statusCode: number, body: string): EventEmitter {
+    const res = new EventEmitter() as EventEmitter & { statusCode: number };
+    res.statusCode = statusCode;
+    // Emit data + end on next tick so the listener is already attached
+    process.nextTick(() => {
+      res.emit("data", Buffer.from(body));
+      res.emit("end");
+    });
+    return res;
+  }
+
+  it("returns filtered Claude models on success", async () => {
+    const payload = {
+      data: [
+        { id: "anthropic/claude-opus-4", name: "Claude Opus 4" },
+        { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4" },
+        { id: "google/gemini-pro", name: "Gemini Pro" },
+      ],
+    };
+    vi.mocked(https.get).mockImplementation((_url, _opts, cb) => {
+      (cb as (res: EventEmitter) => void)(fakeResponse(200, JSON.stringify(payload)));
+      return new EventEmitter() as ReturnType<typeof https.get>;
+    });
+
+    const result = await fetchOpenRouterModels("sk-or-test");
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe("anthropic/claude-opus-4");
+    expect(result[1].id).toBe("anthropic/claude-sonnet-4");
+  });
+
+  it("throws on non-2xx status", async () => {
+    vi.mocked(https.get).mockImplementation((_url, _opts, cb) => {
+      (cb as (res: EventEmitter) => void)(fakeResponse(401, "Unauthorized"));
+      return new EventEmitter() as ReturnType<typeof https.get>;
+    });
+
+    await expect(fetchOpenRouterModels("bad-key")).rejects.toThrow(
+      "OpenRouter API error (401)",
+    );
+  });
+
+  it("throws when no Claude models are found", async () => {
+    const payload = { data: [{ id: "google/gemini-pro", name: "Gemini Pro" }] };
+    vi.mocked(https.get).mockImplementation((_url, _opts, cb) => {
+      (cb as (res: EventEmitter) => void)(fakeResponse(200, JSON.stringify(payload)));
+      return new EventEmitter() as ReturnType<typeof https.get>;
+    });
+
+    await expect(fetchOpenRouterModels("sk-or-test")).rejects.toThrow(
+      "No Claude models found",
+    );
+  });
+
+  it("throws on request error", async () => {
+    vi.mocked(https.get).mockImplementation((_url, _opts, _cb) => {
+      const req = new EventEmitter() as ReturnType<typeof https.get>;
+      process.nextTick(() => req.emit("error", new Error("ECONNREFUSED")));
+      return req;
+    });
+
+    await expect(fetchOpenRouterModels("sk-or-test")).rejects.toThrow("ECONNREFUSED");
   });
 });
 
