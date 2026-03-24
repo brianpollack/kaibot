@@ -97,3 +97,6 @@ Implemented a New Feature dialog popup in the KaiBot web UI. Pressing **N** or c
 March 24th, 2026: main: brian
 Added a CSS media query (`@media (min-width: 1400px)`) at the end of `web/static/css/main.css` that doubles the new feature dialog size on large screens:
 
+March 24th, 2026: main: brian
+Updated the internal web server (`src/web/routes.ts`) to add comprehensive no-cache headers to all HTTP responses. A `NO_CACHE_HEADERS` constant sets `Cache-Control: no-cache, no-store, must-revalidate`, `Pragma: no-cache`, and `Expires: 0` — applied to every route including HTML pages, API endpoints, static files (CSS, JS, images), redirects, and error responses. Added a new `/robots.txt` route that returns a `Disallow: /` response blocking all robots. Created `src/__tests__/routes.test.ts` with 5 tests verifying the robots.txt content and no-cache headers across multiple route types.
+

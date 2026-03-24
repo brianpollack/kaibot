@@ -37,6 +37,16 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const WEB_ROOT = resolve(__dirname, "../../web");
 
 // ---------------------------------------------------------------------------
+// No-cache headers — ensure every response expires immediately
+// ---------------------------------------------------------------------------
+
+const NO_CACHE_HEADERS: Record<string, string> = {
+  "Cache-Control": "no-cache, no-store, must-revalidate",
+  "Pragma":        "no-cache",
+  "Expires":       "0",
+};
+
+// ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
 
@@ -51,9 +61,19 @@ export function handleRequest(
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   const pathname = url.pathname;
 
+  // ── robots.txt — disallow all robots ───────────────────────────────
+  if (pathname === "/robots.txt") {
+    res.writeHead(200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      ...NO_CACHE_HEADERS,
+    });
+    res.end("User-agent: *\nDisallow: /\n");
+    return;
+  }
+
   // ── Login placeholder: redirect / and /login to /main ──────────────
   if (pathname === "/" || pathname === "/login") {
-    res.writeHead(302, { Location: "/main" });
+    res.writeHead(302, { Location: "/main", ...NO_CACHE_HEADERS });
     res.end();
     return;
   }
@@ -61,28 +81,28 @@ export function handleRequest(
   // ── Main dashboard page ────────────────────────────────────────────
   if (pathname === "/main") {
     const html = renderMainPage(server);
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", ...NO_CACHE_HEADERS });
     res.end(html);
     return;
   }
 
   // ── API: current state (for initial load) ──────────────────────────
   if (pathname === "/api/state") {
-    res.writeHead(200, { "Content-Type": "application/json" });
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
     res.end(JSON.stringify(getWebState()));
     return;
   }
 
   // ── API: available models ──────────────────────────────────────────
   if (pathname === "/api/models") {
-    res.writeHead(200, { "Content-Type": "application/json" });
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
     res.end(JSON.stringify(MODELS));
     return;
   }
 
   // ── API: features list (pending + complete) ────────────────────────
   if (pathname === "/api/features" && req.method === "GET") {
-    res.writeHead(200, { "Content-Type": "application/json" });
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
     res.end(JSON.stringify(getFeaturesList(server.projectDir)));
     return;
   }
@@ -97,7 +117,7 @@ export function handleRequest(
         const hold = Boolean(data["hold"]);
 
         if (!title) {
-          res.writeHead(400, { "Content-Type": "application/json" });
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
           res.end(JSON.stringify({ error: "Title is required" }));
           return;
         }
@@ -111,11 +131,11 @@ export function handleRequest(
         const filePath = join(targetDir, `${featureId}.md`);
         writeFileSync(filePath, content, "utf-8");
 
-        res.writeHead(201, { "Content-Type": "application/json" });
+        res.writeHead(201, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
         res.end(JSON.stringify({ id: featureId, title, hold, filePath: filePath }));
       })
       .catch(() => {
-        res.writeHead(400, { "Content-Type": "application/json" });
+        res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
         res.end(JSON.stringify({ error: "Invalid request body" }));
       });
     return;
@@ -128,7 +148,7 @@ export function handleRequest(
   }
 
   // ── 404 ────────────────────────────────────────────────────────────
-  res.writeHead(404, { "Content-Type": "text/plain" });
+  res.writeHead(404, { "Content-Type": "text/plain", ...NO_CACHE_HEADERS });
   res.end("Not Found");
 }
 
@@ -281,13 +301,13 @@ function serveStatic(pathname: string, res: ServerResponse): void {
 
   // Must stay within WEB_ROOT
   if (!resolved.startsWith(WEB_ROOT)) {
-    res.writeHead(403, { "Content-Type": "text/plain" });
+    res.writeHead(403, { "Content-Type": "text/plain", ...NO_CACHE_HEADERS });
     res.end("Forbidden");
     return;
   }
 
   if (!existsSync(resolved) || !statSync(resolved).isFile()) {
-    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.writeHead(404, { "Content-Type": "text/plain", ...NO_CACHE_HEADERS });
     res.end("Not Found");
     return;
   }
@@ -298,7 +318,7 @@ function serveStatic(pathname: string, res: ServerResponse): void {
   const body = readFileSync(resolved);
   res.writeHead(200, {
     "Content-Type": contentType,
-    "Cache-Control": "no-cache",
+    ...NO_CACHE_HEADERS,
   });
   res.end(body);
 }

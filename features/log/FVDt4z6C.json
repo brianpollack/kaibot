@@ -1,0 +1,33 @@
+{
+  "id": "FVDt4z6C",
+  "requestedAt": "2026-03-24T16:30:57.202Z",
+  "completedAt": "2026-03-24T16:32:53.165Z",
+  "executionTimeMs": 93706,
+  "model": "claude-opus-4-6",
+  "tokensIn": 11,
+  "tokensOut": 1922,
+  "cacheReadTokens": 149910,
+  "cacheWriteTokens": 9252,
+  "totalCostUsd": 0.31808405000000006,
+  "numTurns": 9,
+  "filesChanged": [
+    "CHANGELOG.md",
+    "features/complete/oncehCNn.md",
+    "web/static/css/main.css"
+  ],
+  "testsAdded": [],
+  "gitBranch": "main",
+  "gitCommitHash": "4837c04fad8d16a3ac22612d7535a1232abc1fd4",
+  "description": "Feature ID: oncehCNn The new feature window and editor is very small.  If the css detects a large enough screen size, then double the size of the new feature window.",
+  "planPoints": [
+    "1. Add a CSS media query for large screens (min-width: 1400px) that doubles the dialog box width and textarea height — added `@media (min-width: 1400px)` block to `web/static/css/main.css` doubling `.dialog-box` width (560px → 1120px) and `.dialog-textarea` min-height (180px → 360px)",
+    "2. Verify the changes with typecheck/build — typecheck passes clean"
+  ],
+  "source": "file",
+  "linearIssueId": null,
+  "linearIdentifier": null,
+  "status": "success",
+  "errorMessage": null,
+  "title": "Double feature window size on large screens",
+  "summary": "A CSS media query was added to double the size of the new feature dialog box on large screens (min-width: 1400px), expanding the dialog width from 560px to 1120px and the textarea minimum height from 180px to 360px. The change preserves the existing max-width constraint so the dialog still scales gracefully on intermediate screen sizes. This provides a better user experience for users with larger displays without affecting smaller screens."
+}
