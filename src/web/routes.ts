@@ -6,7 +6,12 @@ import { fileURLToPath } from "url";
 import { renderMainPage } from "./templates.js";
 import { getWebState } from "./wsHandler.js";
 import type { WebServer } from "./WebServer.js";
-import { getAvailableProviders, getModelsForProvider, type ProviderName } from "../models.js";
+import {
+  fetchOpenRouterModels,
+  getAvailableProviders,
+  getModelsForProvider,
+  type ProviderName,
+} from "../models.js";
 import { uiStore } from "../ui/store.js";
 import { generateFeatureId } from "../feature.js";
 
@@ -46,6 +51,10 @@ const NO_CACHE_HEADERS: Record<string, string> = {
   "Pragma":        "no-cache",
   "Expires":       "0",
 };
+
+function isProviderName(value: string): value is ProviderName {
+  return value === "anthropic" || value === "openrouter";
+}
 
 // ---------------------------------------------------------------------------
 // Route handler
@@ -96,7 +105,27 @@ export function handleRequest(
 
   // ── API: available models (returns models for the current provider) ─
   if (pathname === "/api/models") {
-    const provider = uiStore.getState().provider as ProviderName;
+    const providerParam = url.searchParams.get("provider");
+    const provider = providerParam && isProviderName(providerParam)
+      ? providerParam
+      : (uiStore.getState().provider as ProviderName);
+
+    if (provider === "openrouter" && process.env.OPENROUTER_API_KEY) {
+      fetchOpenRouterModels(process.env.OPENROUTER_API_KEY)
+        .then((models) => {
+          res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify(models.map((model) => ({
+            id: model.id,
+            description: model.display_name || model.id,
+          }))));
+        })
+        .catch(() => {
+          res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify(getModelsForProvider(provider)));
+        });
+      return;
+    }
+
     const models = getModelsForProvider(provider);
     res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
     res.end(JSON.stringify(models));

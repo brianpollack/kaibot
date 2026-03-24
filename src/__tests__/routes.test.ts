@@ -1,6 +1,7 @@
 import { EventEmitter } from "events";
 import { describe, expect, it, vi } from "vitest";
 
+import * as models from "../models.js";
 import { handleRequest } from "../web/routes.js";
 import type { WebServer } from "../web/WebServer.js";
 
@@ -121,5 +122,50 @@ describe("routes — no-cache headers", () => {
 
     expect(res.writeHead).toHaveBeenCalledWith(404, expect.anything());
     expectNoCacheHeaders(res);
+  });
+});
+
+describe("routes — /api/models", () => {
+  it("returns live OpenRouter models when provider=openrouter", async () => {
+    const fetchSpy = vi.spyOn(models, "fetchOpenRouterModels").mockResolvedValue([
+      {
+        type: "model",
+        id: "anthropic/claude-sonnet-4",
+        display_name: "Claude Sonnet 4",
+        created_at: "",
+      },
+    ]);
+    process.env.OPENROUTER_API_KEY = "sk-or-test";
+
+    const req = mockReq("GET", "/api/models?provider=openrouter");
+    const res = mockRes();
+    handleRequest(req as any, res as any, fakeServer());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchSpy).toHaveBeenCalledWith("sk-or-test");
+    expect(res.writeHead).toHaveBeenCalledWith(200, expect.objectContaining({
+      "Content-Type": "application/json",
+    }));
+    expect(res.end).toHaveBeenCalledWith(JSON.stringify([
+      { id: "anthropic/claude-sonnet-4", description: "Claude Sonnet 4" },
+    ]));
+
+    fetchSpy.mockRestore();
+    delete process.env.OPENROUTER_API_KEY;
+  });
+
+  it("falls back to static models when live OpenRouter fetch fails", async () => {
+    const fetchSpy = vi.spyOn(models, "fetchOpenRouterModels").mockRejectedValue(new Error("boom"));
+    process.env.OPENROUTER_API_KEY = "sk-or-test";
+
+    const req = mockReq("GET", "/api/models?provider=openrouter");
+    const res = mockRes();
+    handleRequest(req as any, res as any, fakeServer());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(res.end).toHaveBeenCalledWith(JSON.stringify(models.OPENROUTER_MODELS));
+
+    fetchSpy.mockRestore();
+    delete process.env.OPENROUTER_API_KEY;
   });
 });

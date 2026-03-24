@@ -121,3 +121,6 @@ Added a `provider` field to the `FeatureRecord` interface in `src/featureDb.ts` 
 March 24th, 2026: main: brian
 Replaced the `fetchOpenRouterModels` function in `src/models.ts` to use Node's native `https` module (`node:https`) instead of the global `fetch` API. The function now uses `https.get()` with chunked response buffering and manual JSON parsing. Added comprehensive tests in `src/__tests__/models.test.ts` covering success, HTTP errors, missing Claude models, and connection errors — all mocking `node:https` via `vi.mock`.
 
+March 24th, 2026: main: brian
+Updated `web/static/css/main.css` to use `web/static/images/KaiBackground.jpg` as the background image for `html, body`. The background image uses `background-size: cover;` and `background-position: center;` to fit to the aspect ratio and be centered.
+

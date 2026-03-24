@@ -394,6 +394,10 @@ function connectWebSocket() {
     try {
       var msg = JSON.parse(event.data);
       if (msg.type === "state") {
+        var nextProvider = msg.data && msg.data.provider ? msg.data.provider : state.provider;
+        if (nextProvider !== state.provider) {
+          cachedModels = null;
+        }
         state = Object.assign({}, state, msg.data);
         updateDOM();
       }
@@ -604,6 +608,7 @@ function openModelSelector() {
   if (activePopup) return;
 
   var trigger = document.getElementById("model-trigger");
+  var provider = state.provider || "anthropic";
 
   function showWithModels(models) {
     var items = models.map(function (m) {
@@ -634,7 +639,7 @@ function openModelSelector() {
   if (cachedModels) {
     showWithModels(cachedModels);
   } else {
-    fetch("/api/models")
+    fetch("/api/models?provider=" + encodeURIComponent(provider))
       .then(function (res) { return res.json(); })
       .then(function (models) {
         cachedModels = models;

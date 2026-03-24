@@ -17,7 +17,10 @@ html, body {
   font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
   font-size: 13px;
   line-height: 1.5;
-  background: #0B0F1A;
+  background-image: url('../images/KaiBackground.jpg');
+  background-size: cover;
+  background-position: center;
+  background-color: #0B0F1A;
   color: #FFFFFF;
   overflow: hidden;
 }
