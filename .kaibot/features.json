@@ -588,5 +588,779 @@
     "errorMessage": null,
     "title": "",
     "summary": "The implementation added timestamped conversation history and file activity tracking to feature log JSON files by introducing a `timestamp` field to the `FileOp` interface and two new snapshot methods on `UIStore` that capture serializable arrays with ISO 8601 timestamps. The `FeatureRecord` type was extended with optional fields for conversation history and file activity data, and both the file-mode and Linear-mode processing paths in `KaiBot` were updated to capture and include these snapshots in the final log output."
+  },
+  {
+    "id": "klZiGiQo",
+    "requestedAt": "2026-03-24T17:13:54.762Z",
+    "completedAt": "2026-03-24T17:25:22.405Z",
+    "executionTimeMs": 664845,
+    "model": "claude-opus-4-6",
+    "tokensIn": 108,
+    "tokensOut": 28307,
+    "cacheReadTokens": 10198940,
+    "cacheWriteTokens": 125554,
+    "totalCostUsd": 6.789541900000005,
+    "numTurns": 117,
+    "filesChanged": [
+      "CHANGELOG.md",
+      "CLAUDE.md",
+      "features/complete/tI1qHSRN.md",
+      "package.json",
+      "README.md",
+      "src/kai_bot.ts",
+      "src/KaiAgent.ts",
+      "src/KaiBot.ts",
+      "src/KaiClient.ts",
+      "src/models.ts",
+      "src/ui/App.tsx",
+      "src/ui/store.ts",
+      "src/web/routes.ts",
+      "src/web/templates.ts",
+      "src/web/wsHandler.ts",
+      "web/static/html/client.js"
+    ],
+    "testsAdded": [],
+    "gitBranch": "main",
+    "gitCommitHash": "f7ae432ab213e1503c5473ecf6247275406c8684",
+    "description": "Feature ID: tI1qHSRN OpenRouter is an alternative to Anthropic for models.   OpenRouter support should be enabled if the env key is setup before starting the KaiBot.  Check for the key OPENROUTER_API_KEY If set, we should be able to switch providers from Anthropic to OpenRouter by pressing the P key in the Web UI.   This will use a menu exactly like the model selection. When we activate OpenRouter we should update the list of available models. According to the Claude Agent SDK, we need to close the SDK agent and re-open it with these settings: # Add these lines to the file: export OPENROUTER_API_KEY=\"<your-openrouter-api-key>\" export ANTHROPIC_BASE_URL=\"https://openrouter.ai/api\" export ANTHROPIC_AUTH_TOKEN=\"$OPENROUTER_API_KEY\" export ANTHROPIC_API_KEY=\"\" # Important: Must be explicitly empty Add a command \"npm run testOpenrouter\" that will switch the OpenRouter mode and list the available models to the console.",
+    "planPoints": [
+      "1. Add provider concept to models.ts — added ProviderName type, PROVIDERS list, OpenRouter models, fetchOpenRouterModels(), getModelsForProvider(), updated printModels() for provider param",
+      "2. Add provider state to UIStore — added provider/isSelectingProvider to UIState, default values, setProvider/startProviderSelection/finishProviderSelection/selectProvider methods",
+      "3. Add provider support to KaiClient — added provider param to constructor/create, sets ANTHROPIC_BASE_URL/AUTH_TOKEN for openrouter, restoreEnv() method",
+      "4. Add provider selector to terminal UI (App.tsx) — added ProviderSelector component, P hotkey, updated HotkeyBar and ModelSelector to use provider-aware model list",
+      "5. Add provider selector to Web UI — added openProviderSelector in client.js, P key handler, select-provider WebSocket msg, /api/providers endpoint, clickable provider badge in template",
+      "6. Wire provider changes through kai_bot.ts and KaiBot.ts — added provider to KaiBot constructor, provider-changed listener, passed provider through processFeature to KaiClient",
+      "7. Update web templates and wsHandler — added provider to WebUIState, updated wsHandler broadcast, made provider badge clickable in templates (done in step 5)",
+      "8. Add \"npm run testOpenrouter\" script — added testOpenrouter subcommand in kai_bot.ts and npm script in package.json",
+      "9. Update CLAUDE.md and README.md — documented OPENROUTER_API_KEY, testOpenrouter command in both files"
+    ],
+    "source": "file",
+    "linearIssueId": null,
+    "linearIdentifier": null,
+    "status": "success",
+    "errorMessage": null,
+    "title": "Enable OpenRouter with Provider Switching",
+    "summary": "OpenRouter was added as an alternative provider alongside Anthropic, with users able to switch between them via a **P** hotkey in both terminal and web UIs, using a menu pattern identical to the existing model selector. When `OPENROUTER_API_KEY` is set, the KaiClient automatically routes requests through OpenRouter by configuring the appropriate environment variables for the Claude Agent SDK, and the available model list updates to reflect provider-specific options. Provider selection is persisted to settings, and a new `npm run testOpenrouter` command validates the OpenRouter connection and displays available models.",
+    "conversationHistory": [
+      {
+        "type": "thinking",
+        "content": "\n\nI'll start by reading the feature file to understand what needs to be built.Now let me explore the codebase to understand the existing patterns.",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      },
+      {
+        "type": "agent",
+        "content": "Explore the KaiBot codebase thoroughly. I need to understand:\n\n1. The Web UI - how it works, where it's defined, how key presses are handled\n2. Model selection - how models are listed and selected, the menu system\n3. KaiClient setup - how the SDK agent is initialized, API keys, base URL configuration\n4. The CLI entry point and how environment variables are used\n5. Any existing provider/model configuration patterns\n6. The package.json scripts\n\nFocus on these files and any related ones:\n- src/KaiClient.ts\n- src/KaiBot.ts\n- src/KaiAgent.ts\n- src/kai_bot.ts\n- src/security.ts\n- src/models.ts or similar\n- Any web UI related files\n- package.json\n\nBe very thorough - read all relevant files completely.",
+        "timestamp": "2026-03-24T17:14:19.675Z",
+        "agentType": "Explore",
+        "agentDescription": "Explore codebase structure"
+      },
+      {
+        "type": "command",
+        "content": "find /Users/brian/Projects/KaiBot/src -type f -name \"*.ts\" -o -name \"*.tsx\" -o -name \"*.json\" | head -30\nGlob: {\"pattern\":\"src/**/*.ts\",\"path\":\"/Users/brian/Projects/KaiBot\"}",
+        "timestamp": "2026-03-24T17:14:22.709Z"
+      },
+      {
+        "type": "command",
+        "content": "head -50 /Users/brian/Projects/KaiBot/src/settings.ts\nhead -50 /Users/brian/Projects/KaiBot/src/web/templates.ts\nfind /Users/brian/Projects/KaiBot/web -type f 2>/dev/null | grep -E '\\.(js|html|css)$' | sort",
+        "timestamp": "2026-03-24T17:14:39.238Z"
+      },
+      {
+        "type": "thinking",
+        "content": "Let me read the key files I'll need to modify:Let me also read the web client.js and WebServer to understand how provider switching would work in the browser UI:Let me check the WebSocket handler for model selection:Now I have a thorough understanding of the codebase. Let me write the plan to the feature file and then execute it.Now let me implement step by step. Starting with step 1:Now add the OpenRouter fetch function and update printModels:Now update `printModels` to support provider parameter:Mark step 1 done:**Step 2: Add provider state to UIStore**I already read it, let me try again:Now add default state values and methods:Now add provider methods after the model selector section:Also update resetFeature to reset provider selector:**Step 3: Add provider support to KaiClient**Update the `create` factory:**Step 4: Add provider selector to terminal UI**Now update the ModelSelector to use the current provider's model list:Now add the ProviderSelector component after ModelSelector. Let me find the exact location:Now update the hotkeyActive condition and hotkey handler to include provider selection:Add the P hotkey handler:Now add the provider selector overlay rendering and update the ModelSelector call. Let me read the current state:Now update the HotkeyBar to show the P key:**Step 5: Add provider selector to Web UI**\n\nFirst update the wsHandler to include provider:Now add the `select-provider` WebSocket message handler:Now add the `/api/providers` route:Now update client.js to add provider state and the provider selector:Now add provider display to the DOM updater:Now add the openProviderSelector function and P key handler. I need to add it after the model selector code:Now add the P key handler to the keyboard shortcuts section:Add click handler for provider trigger:Now update the template to make the provider item clickable:**Step 6: Wire provider changes through kai_bot.ts and KaiBot.ts**Now add the `testOpenrouter` subcommand and update the provider initialization:Now add provider to the startup and wiring:Add provider-changed listener:Now update KaiBot.ts to accept and track provider:Now wire the provider change listener in KaiBot.start():Now I need to pass the provider to processFeature. Let me check how processFeature calls KaiClient:",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      },
+      {
+        "type": "command",
+        "content": "Grep: {\"pattern\":\"processFeature\",\"path\":\"/Users/brian/Projects/KaiBot/src/KaiAgent.ts\",\"output_mode\":\"content\",\"-n\":true}",
+        "timestamp": "2026-03-24T17:21:34.810Z"
+      },
+      {
+        "type": "thinking",
+        "content": "I see — `KaiClient.create(projectDir, model)` on line 85. I need to pass provider. Let me read the full signature context:Now I need to add provider to `ProcessFeatureOptions` and pass it through. Let me check the options interface:",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      },
+      {
+        "type": "command",
+        "content": "Grep: {\"pattern\":\"ProcessFeatureOptions\",\"path\":\"/Users/brian/Projects/KaiBot/src/KaiAgent.ts\",\"output_mode\":\"content\",\"-C\":3}",
+        "timestamp": "2026-03-24T17:21:55.157Z"
+      },
+      {
+        "type": "thinking",
+        "content": "Now update KaiBot.ts to pass provider to processFeature:",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      },
+      {
+        "type": "command",
+        "content": "Grep: {\"pattern\":\"processFeature\\\\(feature\\\"\",\"path\":\"/Users/brian/Projects/KaiBot/src/KaiBot.ts\",\"output_mode\":\"content\",\"-n\":true}\nGrep: {\"pattern\":\"processFeature\\\\(\\\"\",\"path\":\"/Users/brian/Projects/KaiBot/src/KaiBot.ts\",\"output_mode\":\"content\",\"-n\":true}\nGrep: {\"pattern\":\"processFeature\\\\(\\\"\",\"path\":\"/Users/brian/Projects/KaiBot/src/KaiBot.ts\",\"output_mode\":\"content\",\"-n\":true,\"-i\":true}\nGrep: {\"pattern\":\"processFeature\",\"path\":\"/Users/brian/Projects/KaiBot/src/KaiBot.ts\",\"output_mode\":\"content\",\"-n\":true}",
+        "timestamp": "2026-03-24T17:22:21.379Z"
+      },
+      {
+        "type": "thinking",
+        "content": "**Step 7: Already done** — I already updated wsHandler and templates in step 5. Let me mark it:**Step 8: Add npm run testOpenrouter script****Step 9: Update CLAUDE.md and README.md**Now update README.md:",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      },
+      {
+        "type": "command",
+        "content": "Grep: {\"pattern\":\"testOpenrouter|## Usage\\\"\",\"path\":\"/Users/brian/Projects/KaiBot/README.md\",\"output_mode\":\"content\",\"-n\":true}\nGrep: {\"pattern\":\"## Usage\",\"path\":\"/Users/brian/Projects/KaiBot/README.md\",\"output_mode\":\"content\",\"-n\":true}",
+        "timestamp": "2026-03-24T17:23:29.567Z"
+      },
+      {
+        "type": "thinking",
+        "content": "Now let me run the typecheck to make sure everything compiles:",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      },
+      {
+        "type": "command",
+        "content": "npm run typecheck 2>&1",
+        "timestamp": "2026-03-24T17:23:57.934Z"
+      },
+      {
+        "type": "thinking",
+        "content": "Typecheck passes. Let me also run lint:",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      },
+      {
+        "type": "command",
+        "content": "npm run lint 2>&1",
+        "timestamp": "2026-03-24T17:24:03.178Z"
+      },
+      {
+        "type": "thinking",
+        "content": "3 lint errors to fix — unused imports:",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      },
+      {
+        "type": "command",
+        "content": "npm run lint 2>&1",
+        "timestamp": "2026-03-24T17:24:33.958Z"
+      },
+      {
+        "type": "thinking",
+        "content": "All lint errors fixed (the remaining warnings are pre-existing in a test file). Let me run the tests:",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      },
+      {
+        "type": "command",
+        "content": "npm test 2>&1",
+        "timestamp": "2026-03-24T17:24:40.062Z"
+      },
+      {
+        "type": "thinking",
+        "content": "The only failure is the SDK smoke test which requires `ANTHROPIC_API_KEY` - the 12 smoke tests are skipped. The error shown is the suite-level initialization failure, not from my changes. All 228 passing tests continue to pass.\n\nNow let me also check if there's a `ModelSelector` in client.js that needs to invalidate cached models when provider changes. The model list should refresh when provider changes. Let me update the model selector to clear cache on provider change:Good - I already made the provider selector clear `cachedModels = null` when provider changes. The `/api/models` endpoint already uses the current provider from uiStore. This should work correctly.\n\nNow let me append the Summary section:The implementation is complete. Here's a summary of what was built:\n\n### Files Modified\n\n| File                              | Changes                                                           |\n|-----------------------------------|-------------------------------------------------------------------|\n| `src/models.ts`                   | Added `ProviderName` type, `PROVIDERS` list, `OPENROUTER_MODELS`, `fetchOpenRouterModels()`, `getModelsForProvider()`, updated `printModels()` |\n| `src/ui/store.ts`                 | Added `provider`/`isSelectingProvider` to state, provider selector methods, `provider-changed` event |\n| `src/KaiClient.ts`               | Added `provider` param, configures env vars for OpenRouter (`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, empty `ANTHROPIC_API_KEY`) |\n| `src/KaiAgent.ts`                 | Added `provider` to `ProcessFeatureOptions`, passes it to `KaiClient.create()` |\n| `src/KaiBot.ts`                   | Added provider tracking, `provider-changed` listener, passes provider to `processFeature()` |\n| `src/kai_bot.ts`                  | Added `testOpenrouter` subcommand, provider initialization from settings, `provider-changed` persistence |\n| `src/ui/App.tsx`                  | Added `ProviderSelector` component, P hotkey, updated `HotkeyBar` and `ModelSelector` for provider awareness |\n| `web/static/html/client.js`      | Added `openProviderSelector()`, P key handler, provider state display, clears model cache on provider switch |\n| `src/web/wsHandler.ts`           | Added `provider` to `WebUIState`, `select-provider` WebSocket message handler |\n| `src/web/routes.ts`              | Added `/api/providers` endpoint, updated `/api/models` to use current provider |\n| `src/web/templates.ts`           | Made provider badge clickable with proper ARIA attributes |\n| `package.json`                    | Added `testOpenrouter` script |\n| `CLAUDE.md`                       | Documented `testOpenrouter` command and `OPENROUTER_API_KEY` env var |\n| `README.md`                       | Documented `testOpenrouter` command and `OPENROUTER_API_KEY` env var |",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      },
+      {
+        "type": "system",
+        "content": "✅ Feature complete — Cost: $6.7895  Turns: 117  Time: 665.4s",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      },
+      {
+        "type": "git",
+        "content": "Feature ID: klZiGiQo Feature ID: tI1qHSRN OpenRouter is an alternative to Anthropic for models.   OpenRouter support should be enabled if the env key is setup before starting the KaiBot.  Check for the key OPENROUTER_API_KEY If set, we should be able to switch providers from Anthropic to OpenRouter by pressing the P key in the Web UI.   This will use a menu exactly like the model selection. When we activate OpenRouter we should update the list of available models. According to the Claude Agent SDK, we need to close the SDK agent and re-open it with these settings: # Add these lines to the file: export OPENROUTER_API_KEY=\"<your-openrouter-api-key>\" export ANTHROPIC_BASE_URL=\"https://openrouter.ai/api\" export ANTHROPIC_AUTH_TOKEN=\"$OPENROUTER_API_KEY\" export ANTHROPIC_API_KEY=\"\" # Important: Must be explicitly empty Add a command \"npm run testOpenrouter\" that will switch the OpenRouter mode and list the available models to the console. [klZiGiQo]",
+        "timestamp": "2026-03-24T17:25:22.404Z"
+      }
+    ],
+    "fileActivity": [
+      {
+        "type": "read",
+        "path": "KaiClient.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:31.865Z"
+      },
+      {
+        "type": "read",
+        "path": "store.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:32.314Z"
+      },
+      {
+        "type": "read",
+        "path": "App.tsx",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:32.324Z"
+      },
+      {
+        "type": "read",
+        "path": "kai_bot.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:32.795Z"
+      },
+      {
+        "type": "read",
+        "path": "WebServer.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:42.852Z"
+      },
+      {
+        "type": "read",
+        "path": "client.js",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:43.272Z"
+      },
+      {
+        "type": "read",
+        "path": "templates.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:43.736Z"
+      },
+      {
+        "type": "read",
+        "path": "routes.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:44.256Z"
+      },
+      {
+        "type": "read",
+        "path": "KaiBot.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:44.720Z"
+      },
+      {
+        "type": "read",
+        "path": "package.json",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:44.761Z"
+      },
+      {
+        "type": "read",
+        "path": "wsHandler.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:49.771Z"
+      },
+      {
+        "type": "read",
+        "path": "env.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:15:49.991Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "Add a command \"npm run testOpe",
+        "timestamp": "2026-03-24T17:16:03.534Z"
+      },
+      {
+        "type": "edit",
+        "path": "models.ts",
+        "preview": "// ---------------------------",
+        "timestamp": "2026-03-24T17:16:19.113Z"
+      },
+      {
+        "type": "edit",
+        "path": "models.ts",
+        "preview": "// ---------------------------",
+        "timestamp": "2026-03-24T17:16:33.009Z"
+      },
+      {
+        "type": "edit",
+        "path": "models.ts",
+        "preview": "/**  * Prints the list of avai",
+        "timestamp": "2026-03-24T17:16:55.899Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [ ] 1. Add provider concept ",
+        "timestamp": "2026-03-24T17:17:02.329Z"
+      },
+      {
+        "type": "edit",
+        "path": "store.ts",
+        "preview": "  // Model selector   /** Whet",
+        "timestamp": "2026-03-24T17:17:08.037Z"
+      },
+      {
+        "type": "read",
+        "path": "store.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:17:11.462Z"
+      },
+      {
+        "type": "edit",
+        "path": "store.ts",
+        "preview": "  // Model selector   /** Whet",
+        "timestamp": "2026-03-24T17:17:16.720Z"
+      },
+      {
+        "type": "edit",
+        "path": "store.ts",
+        "preview": "    isSelectingModel: false,  ",
+        "timestamp": "2026-03-24T17:17:21.004Z"
+      },
+      {
+        "type": "edit",
+        "path": "store.ts",
+        "preview": "  /** Select a new model: upda",
+        "timestamp": "2026-03-24T17:17:28.974Z"
+      },
+      {
+        "type": "edit",
+        "path": "store.ts",
+        "preview": "    this.state.isSelectingMode",
+        "timestamp": "2026-03-24T17:17:33.079Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [ ] 2. Add provider state to",
+        "timestamp": "2026-03-24T17:17:37.789Z"
+      },
+      {
+        "type": "edit",
+        "path": "KaiClient.ts",
+        "preview": "import { bashSecurityHook } fr",
+        "timestamp": "2026-03-24T17:17:42.480Z"
+      },
+      {
+        "type": "edit",
+        "path": "KaiClient.ts",
+        "preview": "export class KaiClient {   rea",
+        "timestamp": "2026-03-24T17:17:53.358Z"
+      },
+      {
+        "type": "edit",
+        "path": "KaiClient.ts",
+        "preview": "  /**    * Convenience factory",
+        "timestamp": "2026-03-24T17:18:00.511Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [ ] 3. Add provider support ",
+        "timestamp": "2026-03-24T17:18:05.905Z"
+      },
+      {
+        "type": "read",
+        "path": "App.tsx",
+        "preview": "",
+        "timestamp": "2026-03-24T17:18:09.424Z"
+      },
+      {
+        "type": "edit",
+        "path": "App.tsx",
+        "preview": "import { reviewAndWriteFeature",
+        "timestamp": "2026-03-24T17:18:14.905Z"
+      },
+      {
+        "type": "edit",
+        "path": "App.tsx",
+        "preview": "function ModelSelector({   cur",
+        "timestamp": "2026-03-24T17:18:21.090Z"
+      },
+      {
+        "type": "read",
+        "path": "App.tsx",
+        "preview": "",
+        "timestamp": "2026-03-24T17:18:25.670Z"
+      },
+      {
+        "type": "edit",
+        "path": "App.tsx",
+        "preview": "// ---------------------------",
+        "timestamp": "2026-03-24T17:18:40.548Z"
+      },
+      {
+        "type": "read",
+        "path": "App.tsx",
+        "preview": "",
+        "timestamp": "2026-03-24T17:18:44.273Z"
+      },
+      {
+        "type": "edit",
+        "path": "App.tsx",
+        "preview": "  const hotkeyActive =     sta",
+        "timestamp": "2026-03-24T17:18:48.630Z"
+      },
+      {
+        "type": "edit",
+        "path": "App.tsx",
+        "preview": "      if (input.toLowerCase() ",
+        "timestamp": "2026-03-24T17:18:53.866Z"
+      },
+      {
+        "type": "read",
+        "path": "App.tsx",
+        "preview": "",
+        "timestamp": "2026-03-24T17:18:57.583Z"
+      },
+      {
+        "type": "edit",
+        "path": "App.tsx",
+        "preview": "  // When model selector is ac",
+        "timestamp": "2026-03-24T17:19:04.176Z"
+      },
+      {
+        "type": "edit",
+        "path": "App.tsx",
+        "preview": "            <Text color=\"cyan\"",
+        "timestamp": "2026-03-24T17:19:09.877Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [ ] 4. Add provider selector",
+        "timestamp": "2026-03-24T17:19:17.704Z"
+      },
+      {
+        "type": "read",
+        "path": "tI1qHSRN.md",
+        "preview": "",
+        "timestamp": "2026-03-24T17:19:21.039Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [ ] 4. Add provider selector",
+        "timestamp": "2026-03-24T17:19:25.136Z"
+      },
+      {
+        "type": "edit",
+        "path": "wsHandler.ts",
+        "preview": "/** Shape of the state object ",
+        "timestamp": "2026-03-24T17:19:33.637Z"
+      },
+      {
+        "type": "edit",
+        "path": "wsHandler.ts",
+        "preview": "    status: s.status,     proj",
+        "timestamp": "2026-03-24T17:19:37.936Z"
+      },
+      {
+        "type": "edit",
+        "path": "wsHandler.ts",
+        "preview": "        if (msg.type === \"sele",
+        "timestamp": "2026-03-24T17:19:42.965Z"
+      },
+      {
+        "type": "edit",
+        "path": "routes.ts",
+        "preview": "import { MODELS } from \"../mod",
+        "timestamp": "2026-03-24T17:19:47.219Z"
+      },
+      {
+        "type": "edit",
+        "path": "routes.ts",
+        "preview": "  // ── API: available models ",
+        "timestamp": "2026-03-24T17:19:53.852Z"
+      },
+      {
+        "type": "edit",
+        "path": "client.js",
+        "preview": "let state = {   status: \"idle\"",
+        "timestamp": "2026-03-24T17:19:59.513Z"
+      },
+      {
+        "type": "edit",
+        "path": "client.js",
+        "preview": "  if ($currentModel) $currentM",
+        "timestamp": "2026-03-24T17:20:05.107Z"
+      },
+      {
+        "type": "edit",
+        "path": "client.js",
+        "preview": "// ---------------------------",
+        "timestamp": "2026-03-24T17:20:15.151Z"
+      },
+      {
+        "type": "edit",
+        "path": "client.js",
+        "preview": "    case \"m\":       e.preventD",
+        "timestamp": "2026-03-24T17:20:19.643Z"
+      },
+      {
+        "type": "edit",
+        "path": "client.js",
+        "preview": "  var navDash = document.getEl",
+        "timestamp": "2026-03-24T17:20:24.908Z"
+      },
+      {
+        "type": "edit",
+        "path": "templates.ts",
+        "preview": "      <span class=\"status-item",
+        "timestamp": "2026-03-24T17:20:31.584Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [ ] 5. Add provider selector",
+        "timestamp": "2026-03-24T17:20:37.842Z"
+      },
+      {
+        "type": "edit",
+        "path": "kai_bot.ts",
+        "preview": "import { loadSettings, saveSet",
+        "timestamp": "2026-03-24T17:20:42.759Z"
+      },
+      {
+        "type": "read",
+        "path": "kai_bot.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:20:46.460Z"
+      },
+      {
+        "type": "edit",
+        "path": "kai_bot.ts",
+        "preview": "import { printModels } from \".",
+        "timestamp": "2026-03-24T17:20:50.454Z"
+      },
+      {
+        "type": "edit",
+        "path": "kai_bot.ts",
+        "preview": "if (subcommand === \"models\") {",
+        "timestamp": "2026-03-24T17:20:57.415Z"
+      },
+      {
+        "type": "edit",
+        "path": "kai_bot.ts",
+        "preview": "const savedSettings = loadSett",
+        "timestamp": "2026-03-24T17:21:02.650Z"
+      },
+      {
+        "type": "edit",
+        "path": "kai_bot.ts",
+        "preview": "// Keep webServer model in syn",
+        "timestamp": "2026-03-24T17:21:07.929Z"
+      },
+      {
+        "type": "read",
+        "path": "KaiBot.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:21:11.761Z"
+      },
+      {
+        "type": "edit",
+        "path": "KaiBot.ts",
+        "preview": "import { uiStore } from \"./ui/",
+        "timestamp": "2026-03-24T17:21:15.643Z"
+      },
+      {
+        "type": "edit",
+        "path": "KaiBot.ts",
+        "preview": "  private model: string;    /*",
+        "timestamp": "2026-03-24T17:21:22.649Z"
+      },
+      {
+        "type": "edit",
+        "path": "KaiBot.ts",
+        "preview": "    uiStore.setProjectDir(this",
+        "timestamp": "2026-03-24T17:21:29.352Z"
+      },
+      {
+        "type": "read",
+        "path": "KaiAgent.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:21:38.325Z"
+      },
+      {
+        "type": "read",
+        "path": "KaiAgent.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:21:42.749Z"
+      },
+      {
+        "type": "read",
+        "path": "KaiAgent.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:21:47.061Z"
+      },
+      {
+        "type": "read",
+        "path": "KaiAgent.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:21:51.091Z"
+      },
+      {
+        "type": "edit",
+        "path": "KaiAgent.ts",
+        "preview": "import { KaiClient } from \"./K",
+        "timestamp": "2026-03-24T17:21:59.434Z"
+      },
+      {
+        "type": "edit",
+        "path": "KaiAgent.ts",
+        "preview": "export interface ProcessFeatur",
+        "timestamp": "2026-03-24T17:22:02.923Z"
+      },
+      {
+        "type": "edit",
+        "path": "KaiAgent.ts",
+        "preview": "  const client = KaiClient.cre",
+        "timestamp": "2026-03-24T17:22:07.409Z"
+      },
+      {
+        "type": "read",
+        "path": "KaiBot.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:22:25.177Z"
+      },
+      {
+        "type": "edit",
+        "path": "KaiBot.ts",
+        "preview": "      const stats = await proc",
+        "timestamp": "2026-03-24T17:22:30.011Z"
+      },
+      {
+        "type": "read",
+        "path": "KaiBot.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:22:33.162Z"
+      },
+      {
+        "type": "edit",
+        "path": "KaiBot.ts",
+        "preview": "      const stats = await proc",
+        "timestamp": "2026-03-24T17:22:36.948Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [ ] 6. Wire provider changes",
+        "timestamp": "2026-03-24T17:22:43.242Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [ ] 7. Update web templates ",
+        "timestamp": "2026-03-24T17:22:49.734Z"
+      },
+      {
+        "type": "edit",
+        "path": "package.json",
+        "preview": "    \"test:real\": \"tsx src/kai_",
+        "timestamp": "2026-03-24T17:22:54.439Z"
+      },
+      {
+        "type": "read",
+        "path": "package.json",
+        "preview": "",
+        "timestamp": "2026-03-24T17:22:57.440Z"
+      },
+      {
+        "type": "edit",
+        "path": "package.json",
+        "preview": "    \"test:real\": \"tsx src/kai_",
+        "timestamp": "2026-03-24T17:23:01.916Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [ ] 8. Add \"npm run testOpen",
+        "timestamp": "2026-03-24T17:23:07.225Z"
+      },
+      {
+        "type": "read",
+        "path": "CLAUDE.md",
+        "preview": "",
+        "timestamp": "2026-03-24T17:23:11.311Z"
+      },
+      {
+        "type": "edit",
+        "path": "CLAUDE.md",
+        "preview": "npm run test         # Run all",
+        "timestamp": "2026-03-24T17:23:16.624Z"
+      },
+      {
+        "type": "edit",
+        "path": "CLAUDE.md",
+        "preview": "Set `ANTHROPIC_API_KEY` (requi",
+        "timestamp": "2026-03-24T17:23:21.942Z"
+      },
+      {
+        "type": "read",
+        "path": "README.md",
+        "preview": "",
+        "timestamp": "2026-03-24T17:23:33.939Z"
+      },
+      {
+        "type": "edit",
+        "path": "README.md",
+        "preview": "export LINEAR_API_KEY=lin_api_",
+        "timestamp": "2026-03-24T17:23:37.966Z"
+      },
+      {
+        "type": "edit",
+        "path": "README.md",
+        "preview": "| `npm run models`            ",
+        "timestamp": "2026-03-24T17:23:42.430Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [ ] 9. Update CLAUDE.md and ",
+        "timestamp": "2026-03-24T17:23:46.978Z"
+      },
+      {
+        "type": "read",
+        "path": "tI1qHSRN.md",
+        "preview": "",
+        "timestamp": "2026-03-24T17:23:50.279Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [ ] 9. Update CLAUDE.md and ",
+        "timestamp": "2026-03-24T17:23:54.238Z"
+      },
+      {
+        "type": "edit",
+        "path": "kai_bot.ts",
+        "preview": "import { isOpenRouterAvailable",
+        "timestamp": "2026-03-24T17:24:08.496Z"
+      },
+      {
+        "type": "read",
+        "path": "kai_bot.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:24:11.652Z"
+      },
+      {
+        "type": "edit",
+        "path": "kai_bot.ts",
+        "preview": "import { isOpenRouterAvailable",
+        "timestamp": "2026-03-24T17:24:16.273Z"
+      },
+      {
+        "type": "read",
+        "path": "App.tsx",
+        "preview": "",
+        "timestamp": "2026-03-24T17:24:19.597Z"
+      },
+      {
+        "type": "edit",
+        "path": "App.tsx",
+        "preview": "import { MODELS, getAvailableP",
+        "timestamp": "2026-03-24T17:24:23.228Z"
+      },
+      {
+        "type": "read",
+        "path": "routes.ts",
+        "preview": "",
+        "timestamp": "2026-03-24T17:24:26.295Z"
+      },
+      {
+        "type": "edit",
+        "path": "routes.ts",
+        "preview": "import { MODELS, getAvailableP",
+        "timestamp": "2026-03-24T17:24:30.676Z"
+      },
+      {
+        "type": "read",
+        "path": "client.js",
+        "preview": "",
+        "timestamp": "2026-03-24T17:24:48.120Z"
+      },
+      {
+        "type": "read",
+        "path": "tI1qHSRN.md",
+        "preview": "",
+        "timestamp": "2026-03-24T17:24:53.011Z"
+      },
+      {
+        "type": "edit",
+        "path": "tI1qHSRN.md",
+        "preview": "- [x] 9. Update CLAUDE.md and ",
+        "timestamp": "2026-03-24T17:25:01.847Z"
+      }
+    ]
   }
 ]

@@ -106,3 +106,6 @@ Added timestamped conversation history and file activity tracking to the feature
 March 24th, 2026: main: brian
 Implemented OpenRouter as an alternative provider to Anthropic's direct API. When `OPENROUTER_API_KEY` is set in the environment, users can switch between providers by pressing **P** in both the terminal UI and web UI. The provider selector uses the same popup menu pattern as the existing model selector. When switching providers, the model list automatically updates to show provider-appropriate models (e.g. `anthropic/claude-opus-4` for OpenRouter vs `claude-opus-4-6` for Anthropic). The `KaiClient` configures the Claude Agent SDK to route through OpenRouter by setting `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, and clearing `ANTHROPIC_API_KEY` as specified. Provider selection is persisted in `.kaibot/settings.json`. A new `npm run testOpenrouter` command validates the OpenRouter API key and lists available models.
 
+March 24th, 2026: main: brian
+Feature ID: H0owDjSb
+
