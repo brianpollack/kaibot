@@ -1,6 +1,6 @@
 import type { WebSocket, WebSocketServer } from "ws";
 
-import { uiStore, type UIState } from "../ui/store.js";
+import { uiStore, type ConversationItem, type UIState } from "../ui/store.js";
 import { getTodaySpend } from "./spendTracker.js";
 
 // ---------------------------------------------------------------------------
@@ -20,6 +20,7 @@ export interface WebUIState {
   fileOps: UIState["fileOps"];
   planLines: UIState["planLines"];
   planCostInfo: string;
+  conversationItems: ConversationItem[];
   statusMessage: string;
   todaySpend: number;
 }
@@ -48,6 +49,7 @@ export function getWebState(): WebUIState {
     fileOps: s.fileOps,
     planLines: s.planLines,
     planCostInfo: s.planCostInfo,
+    conversationItems: s.conversationItems,
     statusMessage: s.statusMessage,
     todaySpend: getTodaySpend(s.projectDir),
   };

@@ -86,6 +86,7 @@ export async function processFeature(
   const prompt = buildPrompt(feature, projectDir);
   const startTime = Date.now();
 
+  uiStore.startConversation();
   uiStore.setFeatureName(feature.name);
   uiStore.setFeatureStage("reading");
   uiStore.setFeatureStartTime(startTime);
@@ -111,6 +112,7 @@ export async function processFeature(
             uiStore.setFeatureStage("planning");
           }
           uiStore.appendThinking(b.text);
+          uiStore.pushConversationThinking(b.text);
         } else if (b.type === "tool_use" && typeof b.name === "string") {
           hasSeenToolUse = true;
           // Transition to "executing" once edits/writes start (past planning)
@@ -160,6 +162,8 @@ export async function processFeature(
       const costInfo = `Cost: ${costStr}  Turns: ${result.num_turns}  Time: ${elapsedSec}s`;
       uiStore.setStatusMessage(`Done — ${costInfo}`);
       uiStore.setPlanCostInfo(costInfo);
+      uiStore.completeConversationCommand();
+      uiStore.pushConversationSystem(`✅ Feature complete — ${costInfo}`);
       appendFileSync(
         feature.filePath,
         `\n## Metadata\n\n- **Model:** ${model}\n- **Cost:** ${costStr}\n- **Turns:** ${result.num_turns}\n- **Time:** ${elapsedSec}s\n`,
@@ -193,6 +197,7 @@ function routeToolUse(name: string, input: Record<string, unknown> | undefined):
   if (name === "Bash") {
     const cmd = typeof input?.command === "string" ? input.command : "(unknown)";
     uiStore.pushCommand(cmd);
+    uiStore.pushConversationCommand(cmd);
   } else if (FILE_TOOLS.has(name)) {
     const filePath =
       typeof input?.file_path === "string" ? input.file_path : "(unknown)";
@@ -200,10 +205,12 @@ function routeToolUse(name: string, input: Record<string, unknown> | undefined):
     const preview = getFileOpPreview(name, input);
     uiStore.pushFileOp({ type: opType, path: basename(filePath), preview });
   } else {
-    // Other tools (Glob, Grep, etc.) show as commands
+    // Other tools (Glob, Grep, etc.) — truncate only for the narrow InkJS panel
     const inputStr = JSON.stringify(input);
-    const preview = inputStr.length > 60 ? `${inputStr.slice(0, 60)}…` : inputStr;
-    uiStore.pushCommand(`${name}: ${preview}`);
+    const inkLabel = `${name}: ${inputStr.length > 60 ? `${inputStr.slice(0, 60)}…` : inputStr}`;
+    const fullLabel = `${name}: ${inputStr}`;
+    uiStore.pushCommand(inkLabel);
+    uiStore.pushConversationCommand(fullLabel);
   }
 }
 

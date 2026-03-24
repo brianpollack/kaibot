@@ -42,6 +42,15 @@ export interface PlanLine {
   text: string;
 }
 
+export type ConversationItemType = "thinking" | "command" | "git" | "system";
+
+export interface ConversationItem {
+  type: ConversationItemType;
+  content: string;
+  /** For "command" items only: whether the command is still running. */
+  active?: boolean;
+}
+
 export interface UIState {
   // Header
   status: BotStatus;
@@ -69,6 +78,9 @@ export interface UIState {
   planLines: PlanLine[];
   /** Cost/metadata summary shown in the plan panel once the feature is complete. */
   planCostInfo: string;
+
+  // Unified conversation feed — thinking text, commands, git commits, system msgs
+  conversationItems: ConversationItem[];
 
   // Commit prompt
   commitPrompt: CommitPromptState;
@@ -100,6 +112,7 @@ export interface UIState {
 const MAX_THINKING_LINES = 200;
 const MAX_COMMANDS = 100;
 const MAX_FILE_OPS = 100;
+const MAX_CONVERSATION_ITEMS = 500;
 
 // ---------------------------------------------------------------------------
 // Store (singleton)
@@ -120,6 +133,7 @@ class UIStore extends EventEmitter {
     fileOps: [],
     planLines: [],
     planCostInfo: "",
+    conversationItems: [],
     commitPrompt: { visible: false, message: "", countdown: 0 },
     hotkeyInputActive: false,
     hotkeyInputLines: [],
@@ -239,6 +253,83 @@ class UIStore extends EventEmitter {
     this.emitChange();
   }
 
+  // -- Conversation feed ---------------------------------------------------
+
+  /**
+   * Clear the conversation feed.  Call at the START of a new feature so the
+   * previous run's history is wiped before new output begins.
+   */
+  startConversation(): void {
+    this.state.conversationItems = [];
+    this.emitChange();
+  }
+
+  /**
+   * Append assistant thinking text.  Adjacent thinking chunks are merged into
+   * a single item so the feed stays compact.
+   */
+  pushConversationThinking(text: string): void {
+    if (!text) return;
+    const items = this.state.conversationItems;
+    const last = items.at(-1);
+    if (last?.type === "thinking") {
+      last.content += text;
+    } else {
+      items.push({ type: "thinking", content: text });
+    }
+    if (items.length > MAX_CONVERSATION_ITEMS) {
+      this.state.conversationItems = items.slice(-MAX_CONVERSATION_ITEMS);
+    }
+    this.emitChange();
+  }
+
+  /**
+   * Append a command (Bash or tool call) to the conversation.
+   * Marks the previously active command as complete before adding the new one.
+   */
+  pushConversationCommand(command: string): void {
+    const items = this.state.conversationItems;
+    // Complete any previously active command
+    for (const item of items) {
+      if (item.type === "command" && item.active) item.active = false;
+    }
+    items.push({ type: "command", content: command, active: true });
+    if (items.length > MAX_CONVERSATION_ITEMS) {
+      this.state.conversationItems = items.slice(-MAX_CONVERSATION_ITEMS);
+    }
+    this.emitChange();
+  }
+
+  /** Mark the most recently active command as complete. */
+  completeConversationCommand(): void {
+    const items = this.state.conversationItems;
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (items[i].type === "command" && items[i].active) {
+        items[i].active = false;
+        this.emitChange();
+        return;
+      }
+    }
+  }
+
+  /** Append a git commit message to the conversation. */
+  pushConversationGit(message: string): void {
+    this.state.conversationItems = [
+      ...this.state.conversationItems,
+      { type: "git" as const, content: message },
+    ].slice(-MAX_CONVERSATION_ITEMS);
+    this.emitChange();
+  }
+
+  /** Append a system-level message (e.g. "✅ Feature complete"). */
+  pushConversationSystem(message: string): void {
+    this.state.conversationItems = [
+      ...this.state.conversationItems,
+      { type: "system" as const, content: message },
+    ].slice(-MAX_CONVERSATION_ITEMS);
+    this.emitChange();
+  }
+
   // -- Commit prompt -------------------------------------------------------
 
   private commitResolve: ((commit: boolean) => void) | null = null;
@@ -258,11 +349,16 @@ class UIStore extends EventEmitter {
 
   /** Called by the UI when the user answers or the countdown expires. */
   resolveCommitPrompt(commit: boolean): void {
+    const message = this.state.commitPrompt.message;
     this.state.commitPrompt = { visible: false, message: "", countdown: 0 };
     this.emitChange();
     if (this.commitResolve) {
       this.commitResolve(commit);
       this.commitResolve = null;
+    }
+    // Surface the commit in the conversation feed
+    if (commit && message) {
+      this.pushConversationGit(message);
     }
   }
 
@@ -364,6 +460,8 @@ class UIStore extends EventEmitter {
     this.state.fileOps = [];
     this.state.planLines = [];
     this.state.planCostInfo = "";
+    // conversationItems intentionally NOT cleared here — they persist until
+    // the next feature begins (via startConversation()).
     this.state.commitPrompt = { visible: false, message: "", countdown: 0 };
     this.state.hotkeyInputActive = false;
     this.state.hotkeyInputLines = [];

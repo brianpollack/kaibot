@@ -206,7 +206,7 @@ ul { list-style: none; }
   display: flex;
   flex-direction: column;
   width: 62%;
-  min-width: 200px;
+  min-width: 250px;
   overflow: hidden;
 }
 
@@ -214,16 +214,7 @@ ul { list-style: none; }
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-width: 180px;
-  overflow: hidden;
-}
-
-/* Bottom row within the left column (Commands + File Ops side by side) */
-#panels-bottom-row {
-  display: flex;
-  flex-direction: row;
-  flex: 1;
-  min-height: 0;
+  min-width: 220px;
   overflow: hidden;
 }
 
@@ -241,24 +232,19 @@ ul { list-style: none; }
   min-width: 0;
 }
 
-#panel-thinking {
-  flex: 2;
-  min-height: 80px;
-}
-
-#panel-commands {
+/* Conversation panel fills the full left column */
+#panel-conversation {
   flex: 1;
-  min-width: 100px;
-}
-
-#panel-fileops {
-  flex: 1;
-  min-width: 100px;
 }
 
 #panel-status {
   flex: 1;
-  min-height: 100px;
+  min-height: 90px;
+}
+
+#panel-fileops {
+  flex: 1;
+  min-height: 80px;
 }
 
 #panel-plan {
@@ -343,8 +329,120 @@ ul { list-style: none; }
   background: transparent;
 }
 
-/* ── Thinking panel ──────────────────────────────────────────────────── */
+/* ── Conversation feed ───────────────────────────────────────────────── */
 
+/* Thinking text — white, readable prose */
+.conv-thinking-line {
+  padding: 1px 0;
+  color: #FFFFFF;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
+}
+
+.conv-thinking-gap {
+  height: 4px;
+}
+
+/* Command block — terminal-style code box */
+.conv-command {
+  margin: 6px 0;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid #2A344A;
+}
+
+.conv-command.active {
+  border-color: #22C55E55;
+}
+
+.conv-command-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  background: #1A2233;
+  font-size: 10px;
+  font-weight: 700;
+  color: #6B7280;
+}
+
+.conv-command.active .conv-command-header {
+  color: #22C55E;
+}
+
+.conv-command-running {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.conv-command-code {
+  display: block;
+  background: #000000;
+  color: #22C55E;
+  font-family: "Fira Code", "SF Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 7px 12px;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.conv-command.active .conv-command-code {
+  color: #CCFFCC;
+}
+
+/* Git commit block — green-tinted */
+.conv-git {
+  margin: 8px 0;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid #16A34A;
+  background: #071510;
+}
+
+.conv-git-header {
+  padding: 3px 10px;
+  background: #0F2A18;
+  font-size: 10px;
+  font-weight: 700;
+  color: #22C55E;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid #16A34A44;
+}
+
+.conv-git-message {
+  display: block;
+  background: #071510;
+  color: #4ADE80;
+  font-family: "Fira Code", "SF Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 7px 12px;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* System message — centered, accented */
+.conv-system {
+  margin: 10px 0;
+  padding: 7px 14px;
+  background: #0F1A2E;
+  border: 1px solid #3B82F644;
+  border-radius: 5px;
+  color: #3B82F6;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.2px;
+}
+
+/* Legacy — kept for InkJS compat */
 .thinking-line {
   padding: 1px 0;
   color: #8B5CF6;
@@ -356,7 +454,7 @@ ul { list-style: none; }
   color: #2A344A;
 }
 
-/* ── Commands panel ──────────────────────────────────────────────────── */
+/* ── Commands panel (legacy File Ops companion) ──────────────────────── */
 
 .command-entry {
   padding: 2px 0;

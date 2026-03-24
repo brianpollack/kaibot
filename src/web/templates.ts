@@ -113,34 +113,14 @@ export function renderMainPage(server: WebServer): string {
     <!-- ── Dashboard panels (resizable, no external dependencies) ──── -->
     <main id="dock-container" role="main" aria-label="Dashboard panels">
 
-      <!-- Left column: Thinking on top, Commands + File Ops below -->
+      <!-- Left column: unified conversation feed (thinking + commands + git) -->
       <div id="panels-left">
-        <div class="panel" id="panel-thinking">
+        <div class="panel" id="panel-conversation">
           <div class="panel-tab-bar">
-            <span class="panel-tab">&#x1F4AD; Thinking</span>
+            <span class="panel-tab">&#x1F4AC; Conversation</span>
           </div>
-          <div class="panel-content" id="thinking-content"
-               role="region" aria-label="Claude thinking output"></div>
-        </div>
-        <div class="resize-handle resize-handle-h" id="drag-thinking-bottom"
-             aria-hidden="true" title="Drag to resize"></div>
-        <div id="panels-bottom-row">
-          <div class="panel" id="panel-commands">
-            <div class="panel-tab-bar">
-              <span class="panel-tab">&#x26A1; Commands</span>
-            </div>
-            <div class="panel-content" id="commands-content"
-                 role="region" aria-label="Commands panel"></div>
-          </div>
-          <div class="resize-handle resize-handle-v" id="drag-commands-fileops"
-               aria-hidden="true" title="Drag to resize"></div>
-          <div class="panel" id="panel-fileops">
-            <div class="panel-tab-bar">
-              <span class="panel-tab">&#x1F4C4; File Operations</span>
-            </div>
-            <div class="panel-content" id="fileops-content"
-                 role="region" aria-label="File operations panel"></div>
-          </div>
+          <div class="panel-content" id="conversation-content"
+               role="region" aria-label="Agent conversation feed"></div>
         </div>
       </div>
 
@@ -148,7 +128,7 @@ export function renderMainPage(server: WebServer): string {
       <div class="resize-handle resize-handle-v" id="drag-main"
            aria-hidden="true" title="Drag to resize"></div>
 
-      <!-- Right column: Feature Status + Plan -->
+      <!-- Right column: Feature Status + File Operations + Plan stacked -->
       <div id="panels-right">
         <div class="panel" id="panel-status">
           <div class="panel-tab-bar">
@@ -157,7 +137,16 @@ export function renderMainPage(server: WebServer): string {
           <div class="panel-content" id="status-content"
                role="region" aria-label="Feature status panel"></div>
         </div>
-        <div class="resize-handle resize-handle-h" id="drag-status-plan"
+        <div class="resize-handle resize-handle-h" id="drag-status-fileops"
+             aria-hidden="true" title="Drag to resize"></div>
+        <div class="panel" id="panel-fileops">
+          <div class="panel-tab-bar">
+            <span class="panel-tab">&#x1F4C4; File Operations</span>
+          </div>
+          <div class="panel-content" id="fileops-content"
+               role="region" aria-label="File operations panel"></div>
+        </div>
+        <div class="resize-handle resize-handle-h" id="drag-fileops-plan"
              aria-hidden="true" title="Drag to resize"></div>
         <div class="panel" id="panel-plan">
           <div class="panel-tab-bar">

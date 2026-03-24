@@ -5,6 +5,7 @@ import { loadProjectEnv } from "./env.js";
 import { KaiBot } from "./KaiBot.js";
 import { createFeature } from "./feature_creator.js";
 import { printModels } from "./models.js";
+import { loadSettings, saveSettings } from "./settings.js";
 import { mountUI, unmountUI } from "./ui/render.js";
 import { uiStore } from "./ui/store.js";
 import { WebServer } from "./web/WebServer.js";
@@ -80,7 +81,8 @@ if (!process.env.ANTHROPIC_API_KEY) {
   process.exit(1);
 }
 
-const model = process.env.KAI_MODEL ?? "claude-opus-4-6";
+const savedSettings = loadSettings(resolvedDir);
+const model = process.env.KAI_MODEL ?? savedSettings.model ?? "claude-opus-4-6";
 
 // ---------------------------------------------------------------------------
 // Start
@@ -108,9 +110,10 @@ webServer.start().then(() => {
   uiStore.setStatusMessage(`Web UI failed to start: ${msg}`);
 });
 
-// Keep webServer model in sync with UI model changes
+// Keep webServer model in sync with UI model changes; persist to settings file
 uiStore.on("model-changed", (newModel: string) => {
   webServer.model = newModel;
+  saveSettings(resolvedDir, { ...loadSettings(resolvedDir), model: newModel });
 });
 
 const shutdown = () => {
