@@ -528,6 +528,33 @@ function showPopupMenu(opts) {
   if (activePopup.selectedIndex < 0) activePopup.selectedIndex = 0;
 
   renderPopupItems();
+
+  // Use event delegation on the stable menu element so click/hover events
+  // survive the innerHTML replacement that renderPopupItems() performs on
+  // each hover update. Without delegation, re-rendering the menu on mouseenter
+  // destroys the item elements mid-click, preventing the click from firing.
+  menu.addEventListener("click", function (e) {
+    if (!activePopup) return;
+    var item = e.target.closest(".popup-item");
+    if (!item) return;
+    var idx = parseInt(item.getAttribute("data-index"), 10);
+    if (!isNaN(idx) && idx >= 0 && idx < activePopup.items.length) {
+      activePopup.onSelect(activePopup.items[idx]);
+      closePopupMenu();
+    }
+  });
+
+  menu.addEventListener("mouseover", function (e) {
+    if (!activePopup) return;
+    var item = e.target.closest(".popup-item");
+    if (!item) return;
+    var idx = parseInt(item.getAttribute("data-index"), 10);
+    if (!isNaN(idx) && idx !== activePopup.selectedIndex) {
+      activePopup.selectedIndex = idx;
+      renderPopupItems();
+    }
+  });
+
   menu.focus();
 }
 
@@ -582,25 +609,6 @@ function renderPopupItems() {
   }
 
   menu.innerHTML = html;
-
-  // Attach click handlers
-  var itemEls = menu.querySelectorAll(".popup-item");
-  itemEls.forEach(function (el) {
-    el.addEventListener("click", function () {
-      var idx = parseInt(el.getAttribute("data-index"), 10);
-      if (!isNaN(idx) && idx >= 0 && idx < items.length) {
-        activePopup.onSelect(items[idx]);
-        closePopupMenu();
-      }
-    });
-    el.addEventListener("mouseenter", function () {
-      var idx = parseInt(el.getAttribute("data-index"), 10);
-      if (!isNaN(idx)) {
-        activePopup.selectedIndex = idx;
-        renderPopupItems();
-      }
-    });
-  });
 }
 
 function closePopupMenu() {

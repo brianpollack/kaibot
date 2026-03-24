@@ -76,3 +76,6 @@ Added duplicate filename protection to the feature state machine. The new export
 March 24th, 2026: main: brian
 Fixed the Web UI dashboard panels (Thinking, Commands, File Operations, Plan, Feature Status) showing blank content by replacing the broken `dockLayout.updateTab(id, null, true)` re-render mechanism with a proper event-driven approach. A global `panelBus` EventTarget is now used: `updateDOM()` dispatches a `"state-change"` event whenever new WebSocket data arrives, and each `PanelWrapper` React component subscribes to this event and calls `forceUpdate()` to re-render its HTML content. The previous approach failed because rc-dock's `updateTab` with `null` tab data does not trigger React component re-renders.
 
+March 24th, 2026: main: brian
+The model selector popup couldn't be clicked because `renderPopupItems()` replaced the entire `menu.innerHTML` on every `mouseenter`, destroying the clicked item's DOM element mid-click (between `mousedown` and `mouseup`). Fixed by switching to event delegation: per-item click/mouseenter listeners were removed from `renderPopupItems()` and replaced with a single `click` + `mouseover` listener attached once to the stable `menu` element inside `showPopupMenu()`. These delegated listeners survive innerHTML re-renders, so mouse hover and mouse click now both work as expected.
+
