@@ -1,0 +1,41 @@
+{
+  "id": "vfNy6--z",
+  "requestedAt": "2026-03-24T14:40:06.113Z",
+  "completedAt": "2026-03-24T14:45:43.718Z",
+  "executionTimeMs": 320930,
+  "model": "claude-opus-4-6",
+  "tokensIn": 35,
+  "tokensOut": 10558,
+  "cacheReadTokens": 1746560,
+  "cacheWriteTokens": 55670,
+  "totalCostUsd": 1.6546953,
+  "numTurns": 38,
+  "filesChanged": [
+    "CHANGELOG.md",
+    "features/complete/WebUIStreamingStatus.md",
+    "src/KaiAgent.ts",
+    "src/ui/App.tsx",
+    "src/ui/store.ts",
+    "src/web/wsHandler.ts",
+    "web/static/css/main.css",
+    "web/static/html/client.js"
+  ],
+  "testsAdded": [],
+  "gitBranch": "main",
+  "gitCommitHash": "05cf997414b558a74721b28e091b9f110815821e",
+  "description": "The WebUI is supposed to have resizing panels in the middle of the dashboard that receive text updates from the server through the websocket. This was described in the feature features/complete/web_ui.md Missing 1. Claude SDK Thinking Output is missing 2. Claude SDK Commands List is missing 3. File Operations is missing 4. Current Feature Being Processed is missing 5. Current Run time for the feature is missing 6. Current Stage (Review, THinking, Executing plan) is missing 7. Current Plan is missing These sections should be a in console-like scrollable sections with resizable areas of the dashbaord.",
+  "planPoints": [
+    "1. Add `featureStartTime` to UIState/store and expose it in WebUIState so the client can compute a live runtime — added to store.ts, wsHandler.ts, KaiAgent.ts",
+    "2. Increase store history limits (thinking lines, commands, file ops) so the web UI can show full scrollable history — store.ts limits raised to 200/100/100; terminal UI App.tsx now slices display locally",
+    "3. Add a \"Feature Status\" panel to the rc-dock layout showing current feature name, stage badge, and live runtime timer — client.js: added renderFeatureStatusContent, formatElapsed, runtime timer, updated layout and loadTab",
+    "4. Update client.js panel renderers to auto-scroll to bottom on new content (console-like behavior) — PanelWrapper._update() now checks scroll position and auto-scrolls to bottom",
+    "5. Add CSS styles for the new Feature Status panel and console-like scrollable appearance — main.css: added .status-section, .status-label, .status-value, .runtime-value styles",
+    "6. Verify typecheck passes and the build succeeds — typecheck, build, and lint all pass"
+  ],
+  "source": "file",
+  "linearIssueId": null,
+  "linearIdentifier": null,
+  "status": "success",
+  "errorMessage": null,
+  "summary": "The KaiBot Web UI dashboard was enhanced with a new Feature Status panel displaying the current feature name, processing stage, live runtime timer, active model, and bot status, while store history limits were increased from 6/5/4 to 200/100/100 to enable full scrollable histories in console-like panels. Auto-scroll behavior was added to all panels to keep content pinned to the bottom as it streams in, with featureStartTime now tracked and broadcast via WebSocket for client-side runtime calculation."
+}

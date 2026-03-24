@@ -4,6 +4,7 @@ import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  deconflictPath,
   generateFeatureId,
   isNewFeatureFile,
   markComplete,
@@ -33,6 +34,46 @@ describe("generateFeatureId", () => {
   it("generates unique IDs", () => {
     const ids = new Set(Array.from({ length: 100 }, () => generateFeatureId()));
     expect(ids.size).toBe(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deconflictPath
+// ---------------------------------------------------------------------------
+
+describe("deconflictPath", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "kai-test-"));
+  });
+
+  afterEach(() => {
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  });
+
+  it("returns the plain path when no collision", () => {
+    const result = deconflictPath(tmpDir, "my_feature", "abc123");
+    expect(result.name).toBe("my_feature");
+    expect(result.path).toBe(join(tmpDir, "my_feature.md"));
+  });
+
+  it("appends featureId when target already exists", () => {
+    writeFileSync(join(tmpDir, "my_feature.md"), "existing");
+    const result = deconflictPath(tmpDir, "my_feature", "abc123");
+    expect(result.name).toBe("my_feature-abc123");
+    expect(result.path).toBe(join(tmpDir, "my_feature-abc123.md"));
+  });
+
+  it("generates an ID when none supplied and target exists", () => {
+    writeFileSync(join(tmpDir, "my_feature.md"), "existing");
+    const result = deconflictPath(tmpDir, "my_feature");
+    expect(result.name).toMatch(/^my_feature-[A-Za-z0-9_-]+$/);
+    expect(result.path).toMatch(/my_feature-[A-Za-z0-9_-]+\.md$/);
   });
 });
 
@@ -170,6 +211,29 @@ describe("markInProgress", () => {
     const feature = { name: "ghost", state: "new" as const, filePath: missing };
     expect(() => markInProgress(feature)).toThrow();
   });
+
+  it("appends featureId to filename when inprogress/ target already exists", () => {
+    const inprogressDir = join(tmpDir, "inprogress");
+    mkdirSync(inprogressDir, { recursive: true });
+    writeFileSync(join(inprogressDir, "my_feature.md"), "old content");
+
+    const src = join(tmpDir, "my_feature.md");
+    writeFileSync(src, "new content");
+    const original = {
+      name: "my_feature",
+      state: "new" as const,
+      filePath: src,
+      featureId: "testid1",
+    };
+    const updated = markInProgress(original);
+
+    expect(updated.name).toBe("my_feature-testid1");
+    expect(updated.filePath).toBe(join(inprogressDir, "my_feature-testid1.md"));
+    expect(existsSync(join(inprogressDir, "my_feature-testid1.md"))).toBe(true);
+    // Original file in inprogress/ should be preserved
+    expect(existsSync(join(inprogressDir, "my_feature.md"))).toBe(true);
+    expect(existsSync(src)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -225,6 +289,31 @@ describe("markComplete", () => {
     const feature = { name: "ghost", state: "inprogress" as const, filePath: missing };
     expect(() => markComplete(feature)).toThrow();
   });
+
+  it("appends featureId to filename when complete/ target already exists", () => {
+    const inprogressDir = join(tmpDir, "inprogress");
+    const completeDir = join(tmpDir, "complete");
+    mkdirSync(inprogressDir, { recursive: true });
+    mkdirSync(completeDir, { recursive: true });
+    writeFileSync(join(completeDir, "my_feature.md"), "old complete");
+
+    const src = join(inprogressDir, "my_feature.md");
+    writeFileSync(src, "new content");
+    const inprogress = {
+      name: "my_feature",
+      state: "inprogress" as const,
+      filePath: src,
+      featureId: "testid2",
+    };
+    const updated = markComplete(inprogress);
+
+    expect(updated.name).toBe("my_feature-testid2");
+    expect(updated.filePath).toBe(join(completeDir, "my_feature-testid2.md"));
+    expect(existsSync(join(completeDir, "my_feature-testid2.md"))).toBe(true);
+    // Original file in complete/ should be preserved
+    expect(existsSync(join(completeDir, "my_feature.md"))).toBe(true);
+    expect(existsSync(src)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -279,5 +368,30 @@ describe("markHold", () => {
     const missing = join(tmpDir, "inprogress", "ghost.md");
     const feature = { name: "ghost", state: "inprogress" as const, filePath: missing };
     expect(() => markHold(feature)).toThrow();
+  });
+
+  it("appends featureId to filename when hold/ target already exists", () => {
+    const inprogressDir = join(tmpDir, "inprogress");
+    const holdDir = join(tmpDir, "hold");
+    mkdirSync(inprogressDir, { recursive: true });
+    mkdirSync(holdDir, { recursive: true });
+    writeFileSync(join(holdDir, "my_feature.md"), "old held");
+
+    const src = join(inprogressDir, "my_feature.md");
+    writeFileSync(src, "new content");
+    const inprogress = {
+      name: "my_feature",
+      state: "inprogress" as const,
+      filePath: src,
+      featureId: "testid3",
+    };
+    const updated = markHold(inprogress);
+
+    expect(updated.name).toBe("my_feature-testid3");
+    expect(updated.filePath).toBe(join(holdDir, "my_feature-testid3.md"));
+    expect(existsSync(join(holdDir, "my_feature-testid3.md"))).toBe(true);
+    // Original file in hold/ should be preserved
+    expect(existsSync(join(holdDir, "my_feature.md"))).toBe(true);
+    expect(existsSync(src)).toBe(false);
   });
 });

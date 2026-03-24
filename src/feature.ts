@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import { basename, dirname, join } from "path";
-import { mkdirSync, renameSync } from "fs";
+import { existsSync, mkdirSync, renameSync } from "fs";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -96,6 +96,30 @@ export function parseFeature(filePath: string): Feature {
 }
 
 // ---------------------------------------------------------------------------
+// Path helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a non-conflicting `{ path, name }` for a target directory.
+ *
+ * If `<dir>/<name>.md` is already occupied, falls back to
+ * `<dir>/<name>-<featureId>.md`, generating an ID when none is supplied.
+ */
+export function deconflictPath(
+  dir: string,
+  name: string,
+  featureId?: string,
+): { path: string; name: string } {
+  const candidate = join(dir, `${name}.md`);
+  if (!existsSync(candidate)) {
+    return { path: candidate, name };
+  }
+  const id = featureId ?? generateFeatureId();
+  const deconflictedName = `${name}-${id}`;
+  return { path: join(dir, `${deconflictedName}.md`), name: deconflictedName };
+}
+
+// ---------------------------------------------------------------------------
 // State transitions (move on disk + return updated Feature)
 // ---------------------------------------------------------------------------
 
@@ -108,9 +132,9 @@ export function markInProgress(feature: Feature): Feature {
   const featuresDir = dirname(feature.filePath);
   const inprogressDir = join(featuresDir, "inprogress");
   mkdirSync(inprogressDir, { recursive: true });
-  const newPath = join(inprogressDir, `${feature.name}.md`);
+  const { path: newPath, name } = deconflictPath(inprogressDir, feature.name, feature.featureId);
   renameSync(feature.filePath, newPath);
-  return { ...feature, state: "inprogress", filePath: newPath };
+  return { ...feature, name, state: "inprogress", filePath: newPath };
 }
 
 /**
@@ -128,9 +152,9 @@ export function markComplete(feature: Feature): Feature {
       : dirname(feature.filePath);
   const completeDir = join(featuresRoot, "complete");
   mkdirSync(completeDir, { recursive: true });
-  const newPath = join(completeDir, `${feature.name}.md`);
+  const { path: newPath, name } = deconflictPath(completeDir, feature.name, feature.featureId);
   renameSync(feature.filePath, newPath);
-  return { ...feature, state: "complete", filePath: newPath };
+  return { ...feature, name, state: "complete", filePath: newPath };
 }
 
 /**
@@ -148,7 +172,7 @@ export function markHold(feature: Feature): Feature {
       : dirname(feature.filePath);
   const holdDir = join(featuresRoot, "hold");
   mkdirSync(holdDir, { recursive: true });
-  const newPath = join(holdDir, `${feature.name}.md`);
+  const { path: newPath, name } = deconflictPath(holdDir, feature.name, feature.featureId);
   renameSync(feature.filePath, newPath);
-  return { ...feature, state: "hold", filePath: newPath };
+  return { ...feature, name, state: "hold", filePath: newPath };
 }
