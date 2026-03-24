@@ -115,3 +115,6 @@ Fixed `npm run testOpenrouter` model listing and improved the overall model disc
 March 24th, 2026: main: brian
 Added `OPENROUTER_MODEL` environment variable support for OpenRouter provider. When using OpenRouter, the model is resolved from `OPENROUTER_MODEL` (defaulting to `z-ai/glm-5-turbo`). The `npm run testOpenrouter` command now spawns an actual agent via `KaiClient` using the selected OpenRouter model, sends "Tell me about yourself", and prints the response to the console. Documentation updated in both CLAUDE.md and README.md.
 
+March 24th, 2026: main: brian
+Added a `provider` field to the `FeatureRecord` interface in `src/featureDb.ts` and populated it in both the file-source and Linear-source record constructions in `src/KaiBot.ts`. The field stores the human-readable provider label ("Anthropic" or "OpenRouter") by looking up the active `ProviderName` in the `PROVIDERS` array. This means the JSON log files written to `features/log/` now include a `provider` key indicating which API provider was used for the agent run.
+

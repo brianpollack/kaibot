@@ -25,6 +25,7 @@ import {
   type LinearIssue,
   materializeLinearIssue,
 } from "./linear.js";
+import { PROVIDERS } from "./models.js";
 import type { ProviderName } from "./models.js";
 import { uiStore } from "./ui/store.js";
 
@@ -230,6 +231,7 @@ export class KaiBot {
         requestedAt: issue.createdAt,
         completedAt: new Date().toISOString(),
         executionTimeMs: stats.durationMs,
+        provider: PROVIDERS.find((p) => p.id === this.provider)?.label ?? this.provider,
         model: this.model,
         tokensIn: stats.tokensIn,
         tokensOut: stats.tokensOut,
@@ -382,6 +384,7 @@ export class KaiBot {
         requestedAt,
         completedAt: new Date().toISOString(),
         executionTimeMs: stats.durationMs,
+        provider: PROVIDERS.find((p) => p.id === this.provider)?.label ?? this.provider,
         model: this.model,
         tokensIn: stats.tokensIn,
         tokensOut: stats.tokensOut,

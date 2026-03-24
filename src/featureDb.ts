@@ -16,6 +16,8 @@ export interface FeatureRecord {
   completedAt: string;
   /** Wall-clock duration reported by the SDK (ms) */
   executionTimeMs: number;
+  /** Provider used for the agent run ("Anthropic" or "OpenRouter") */
+  provider: string;
   /** Claude model used for the main agent run */
   model: string;
   /** Prompt tokens sent to the API */
