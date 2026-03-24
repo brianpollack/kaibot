@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../KaiAgent.js", () => ({
   processFeature: vi.fn(),
   generateSummary: vi.fn().mockResolvedValue(""),
+  generateTitle: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("../changelog.js", () => ({

@@ -88,3 +88,6 @@ Implemented persistent settings storage in `.kaibot/settings.json`. Created `src
 March 24th, 2026: main: brian
 Added a "Features" menu item to the left nav (between Dashboard and New Feature) with hotkey **F**. The hotkey for "New Feature" was changed from **F** to **N** throughout the nav and keyboard handler.
 
+March 24th, 2026: main: brian
+Added AI-powered feature title generation using the Claude Agent SDK. When a new feature request arrives (from a file or Linear issue), a `generateTitle()` function calls `claude-haiku-4-5` to produce a concise 20-80 character title from the feature content. This title is immediately displayed in both the Ink terminal UI and Web UI via `uiStore.setFeatureName()`, and is persisted as a `title` field in the feature record database (`.kaibot/features.json`) and individual log JSON files (`features/log/<id>.json`). The Web UI's completed features list now prefers the AI-generated title over the raw description. Seven unit tests cover the title generation logic including edge cases for empty content, truncation, and error handling.
+

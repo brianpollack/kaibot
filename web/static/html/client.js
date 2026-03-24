@@ -698,7 +698,7 @@ function renderCompleteFeatures(items) {
     return '<div class="empty-state">(no complete features)</div>';
   }
   return items.map(function (item) {
-    var desc = item.description || item.summary || "";
+    var desc = item.title || item.description || item.summary || "";
     var maxDesc = desc.length > 100 ? desc.slice(0, 100) + "…" : desc;
     return (
       '<div class="feature-list-item">' +

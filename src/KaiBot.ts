@@ -14,7 +14,7 @@ import {
   parseFeature,
 } from "./feature.js";
 import { appendFeatureRecord } from "./featureDb.js";
-import { generateSummary, processFeature } from "./KaiAgent.js";
+import { generateSummary, generateTitle, processFeature } from "./KaiAgent.js";
 import {
   buildLinearPlanComment,
   buildLinearCompletionComment,
@@ -171,6 +171,17 @@ export class KaiBot {
       uiStore.setFeatureName(`${issueIdentifier} ${issue.title}`);
       uiStore.setStatusMessage(`Processing: ${issueIdentifier} ${issue.title}`);
 
+      // Generate an AI title from the materialized feature content
+      let featureTitle = "";
+      try {
+        const rawContent = readFileSync(feature.filePath, "utf8");
+        featureTitle = await generateTitle(rawContent, this.projectDir);
+        if (featureTitle) {
+          uiStore.setFeatureName(`${issueIdentifier} ${featureTitle}`);
+          uiStore.setStatusMessage(`Processing: ${issueIdentifier} ${featureTitle}`);
+        }
+      } catch { /* fall back to Linear issue title */ }
+
       if (this.linearStartedStateId) {
         await this.linearClient.updateIssueState(issueId, this.linearStartedStateId);
       }
@@ -223,6 +234,7 @@ export class KaiBot {
         linearIdentifier: issueIdentifier,
         status: "success",
         errorMessage: null,
+        title: featureTitle || issue.title,
         summary,
       });
 
@@ -315,6 +327,17 @@ export class KaiBot {
       uiStore.setFeatureName(feature.name);
       uiStore.setStatusMessage(`Processing: ${feature.name} [${featureId}]`);
 
+      // Generate an AI title from the raw feature content before agent modifies it
+      let featureTitle = "";
+      try {
+        const rawContent = readFileSync(filePath, "utf8");
+        featureTitle = await generateTitle(rawContent, this.projectDir);
+        if (featureTitle) {
+          uiStore.setFeatureName(featureTitle);
+          uiStore.setStatusMessage(`Processing: ${featureTitle} [${featureId}]`);
+        }
+      } catch { /* fall back to filename-derived name */ }
+
       feature = markInProgress(feature);
       feature.featureId = featureId;
 
@@ -357,6 +380,7 @@ export class KaiBot {
         linearIdentifier: null,
         status: "success" as const,
         errorMessage: null,
+        title: featureTitle,
         summary,
       };
 
@@ -365,7 +389,8 @@ export class KaiBot {
       // Write summary log JSON to features/log/<featureId>.json
       this.writeFeatureLog(featureId, record);
 
-      uiStore.setStatusMessage(`Complete: ${feature.name} [${featureId}]`);
+      const displayName = featureTitle || feature.name;
+      uiStore.setStatusMessage(`Complete: ${displayName} [${featureId}]`);
       uiStore.resetFeature();
       uiStore.setStatus("watching");
       uiStore.setStatusMessage(this.getWatchingMessage());

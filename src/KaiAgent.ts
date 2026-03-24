@@ -321,6 +321,45 @@ export async function generateSummary(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Title generation — uses a cheap model to produce a 20-80 char title
+// ---------------------------------------------------------------------------
+
+const TITLE_MODEL = "claude-haiku-4-5-20251001";
+
+/**
+ * Calls a low-cost model to produce a concise title (20-80 characters) for a
+ * feature based on its file content.  Returns an empty string on any error so
+ * callers can gracefully degrade to the filename-derived name.
+ */
+export async function generateTitle(
+  featureContent: string,
+  projectDir: string,
+): Promise<string> {
+  if (!featureContent.trim()) return "";
+
+  const prompt =
+    `The following is a software feature request. ` +
+    `Write a short title for this feature between 20 and 80 characters. ` +
+    `The title should be a concise, descriptive phrase (not a sentence — no trailing period). ` +
+    `Output only the title, nothing else.\n\n` +
+    `<feature>\n${featureContent}\n</feature>`;
+
+  try {
+    const client = new KaiClient(projectDir, TITLE_MODEL);
+    const raw = (await client.run(prompt)).trim();
+    // Enforce the 20-80 character constraint
+    if (raw.length < 20 || raw.length > 80) {
+      // Truncate or return as-is if close enough
+      if (raw.length > 80) return raw.slice(0, 80);
+      if (raw.length > 0) return raw;
+    }
+    return raw;
+  } catch {
+    return "";
+  }
+}
+
 function readPlanSection(filePath: string): string | null {
   try {
     const content = readFileSync(filePath, "utf8");

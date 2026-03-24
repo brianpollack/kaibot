@@ -109,6 +109,7 @@ interface PendingFeature {
 
 interface CompleteFeature {
   id: string;
+  title: string;
   description: string;
   summary: string;
   completedAt: string;
@@ -195,6 +196,7 @@ function getFeaturesList(projectDir: string): FeaturesList {
           const data = JSON.parse(raw) as Record<string, unknown>;
           complete.push({
             id: String(data["id"] ?? filename.replace(/\.json$/, "")),
+            title: String(data["title"] ?? ""),
             description: String(data["description"] ?? ""),
             summary: String(data["summary"] ?? ""),
             completedAt: String(data["completedAt"] ?? ""),

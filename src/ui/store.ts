@@ -49,6 +49,8 @@ export interface ConversationItem {
   content: string;
   /** For "command" items only: whether the command is still running. */
   active?: boolean;
+  /** Unix ms timestamp — used to coalesce rapid commands into one block. */
+  timestamp?: number;
 }
 
 export interface UIState {
@@ -285,15 +287,27 @@ class UIStore extends EventEmitter {
 
   /**
    * Append a command (Bash or tool call) to the conversation.
-   * Marks the previously active command as complete before adding the new one.
+   * Commands that arrive within 5 seconds of the previous command are merged
+   * into the same code block so rapid bursts (e.g. many ls calls) stay tidy.
    */
   pushConversationCommand(command: string): void {
+    const now = Date.now();
     const items = this.state.conversationItems;
-    // Complete any previously active command
+    const last = items.at(-1);
+
+    // Coalesce into the previous block if it's still "fresh" (≤ 5 s)
+    if (last?.type === "command" && last.active && now - (last.timestamp ?? 0) <= 5_000) {
+      last.content += "\n" + command;
+      last.timestamp = now;
+      this.emitChange();
+      return;
+    }
+
+    // Otherwise close any active command and start a new block
     for (const item of items) {
       if (item.type === "command" && item.active) item.active = false;
     }
-    items.push({ type: "command", content: command, active: true });
+    items.push({ type: "command", content: command, active: true, timestamp: now });
     if (items.length > MAX_CONVERSATION_ITEMS) {
       this.state.conversationItems = items.slice(-MAX_CONVERSATION_ITEMS);
     }

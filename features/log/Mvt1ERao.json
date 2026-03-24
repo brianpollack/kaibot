@@ -1,0 +1,37 @@
+{
+  "id": "Mvt1ERao",
+  "requestedAt": "2026-03-24T15:49:36.356Z",
+  "completedAt": "2026-03-24T15:56:56.829Z",
+  "executionTimeMs": 281547,
+  "model": "claude-sonnet-4-6",
+  "tokensIn": 24,
+  "tokensOut": 12301,
+  "cacheReadTokens": 912839,
+  "cacheWriteTokens": 43407,
+  "totalCostUsd": 0.7921482,
+  "numTurns": 26,
+  "filesChanged": [
+    "CHANGELOG.md",
+    "features/complete/AddFKey.md",
+    "src/web/routes.ts",
+    "src/web/templates.ts",
+    "web/static/css/main.css",
+    "web/static/html/client.js"
+  ],
+  "testsAdded": [],
+  "gitBranch": "main",
+  "gitCommitHash": "204c2afab6304a598d64b24d3776f350459c7542",
+  "description": "Update the menu on the left of the WebUI for a new menu item \"Features\" which appears just under Dashboard. Change the hot key for \"New Feature\" to \"N\" Add the key \"F\" for the Features list. Pressing \"F\" or selecting Features from the menu will hide the Dashbaord converation and open a list of features.   The features list is a dock with 2 parts, the top is Pending  features and the bottom is Complete features. Complete features is taken from the json files in features/log/ Pending is taken from the list of files in features/ and features/hold/",
+  "planPoints": [
+    "1. Add `/api/features` endpoint in `routes.ts` to serve pending and complete feature lists — added `getFeaturesList()` helper and `/api/features` route in `routes.ts`",
+    "2. Update `templates.ts`: add \"Features\" nav item after Dashboard, change \"New Feature\" hotkey kbd to \"N\", add hidden `#features-view` HTML — updated `templates.ts` nav and added features-view main element",
+    "3. Add CSS for the features view (two-panel dock) to `main.css` — added `#features-view`, `#features-panels`, feature list item styles to `main.css`",
+    "4. Update `client.js`: change F hotkey to open features view, add N hotkey for new feature, add view switching logic and features rendering — added `showDashboardView()`, `showFeaturesView()`, `loadFeaturesData()`, render helpers, and updated keyboard/click handlers in `client.js`"
+  ],
+  "source": "file",
+  "linearIssueId": null,
+  "linearIdentifier": null,
+  "status": "success",
+  "errorMessage": null,
+  "summary": "A new \"Features\" menu item was added to the left navigation (between Dashboard and New Feature) with hotkey F, while the \"New Feature\" hotkey was changed from F to N. Pressing F opens a two-panel dock displaying pending features (from `features/` and `features/hold/`) in the top panel and complete features (from `features/log/`) in the bottom panel, each with status badges and metadata. The implementation includes a new `/api/features` endpoint in the backend, HTML and CSS for the features view panels and list items, and updated client-side keyboard handlers and view-switching logic."
+}
