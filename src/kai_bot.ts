@@ -41,22 +41,26 @@ if (subcommand === "feature") {
 // Args
 // ---------------------------------------------------------------------------
 
-const projectDir = subcommand;
+const useLinear = process.argv.includes("--linear");
+const projectDir = process.argv.slice(2).find((arg) => !arg.startsWith("--"));
 
 if (!projectDir) {
-  console.error("Usage: tsx src/kai_bot.ts <project-directory>");
+  console.error("Usage: tsx src/kai_bot.ts <project-directory> [--linear]");
   console.error("       tsx src/kai_bot.ts feature <feature name words...>");
   console.error("       tsx src/kai_bot.ts models");
   console.error("  Example: tsx src/kai_bot.ts /path/to/my-project");
+  console.error("  Example: tsx src/kai_bot.ts /path/to/my-project --linear");
   console.error("  Example: tsx src/kai_bot.ts feature Add user authentication");
   console.error("\nSubcommands:");
   console.error("  models    List available Claude models");
   console.error("  feature   Create a new feature file interactively");
+  console.error("\nFlags:");
+  console.error("  --linear  Enable Linear mode (requires LINEAR_API_KEY and LINEAR_TEAM_KEY)");
   console.error("\nEnvironment variables:");
   console.error("  ANTHROPIC_API_KEY  (required)");
   console.error("  KAI_MODEL          (optional, default: claude-opus-4-6)");
-  console.error("  LINEAR_API_KEY     (optional, enables Linear mode)");
-  console.error("  LINEAR_TEAM_KEY    (optional, team key/name for Linear mode)");
+  console.error("  LINEAR_API_KEY     (required for --linear mode)");
+  console.error("  LINEAR_TEAM_KEY    (required for --linear mode)");
   process.exit(1);
 }
 
@@ -81,7 +85,7 @@ const model = process.env.KAI_MODEL ?? "claude-opus-4-6";
 // Start
 // ---------------------------------------------------------------------------
 
-const bot = new KaiBot(resolvedDir, model);
+const bot = new KaiBot(resolvedDir, model, useLinear);
 
 // Mount the Ink UI
 mountUI();

@@ -42,7 +42,7 @@ describe("KaiBot linear init", () => {
       }),
     };
 
-    const bot = new KaiBot(tmpDir);
+    const bot = new KaiBot(tmpDir, "claude-opus-4-6", true);
     priv(bot).linearClient = mockLinearClient;
 
     await priv(bot).initLinearMode();

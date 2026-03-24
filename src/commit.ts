@@ -69,13 +69,16 @@ export function extractFeatureDescription(
 }
 
 /** Build a commit message from the completed feature. */
-export function buildCommitMessage(feature: Feature): string {
+export function buildCommitMessage(feature: Feature, featureId?: string): string {
   let description = feature.name;
   try {
     const content = readFileSync(feature.filePath, "utf8");
     description = extractFeatureDescription(content, feature.name);
   } catch {
     // Fall back to feature name
+  }
+  if (featureId) {
+    return `${description} [${featureId}]`;
   }
   return description;
 }
@@ -96,6 +99,7 @@ export function buildCommitMessage(feature: Feature): string {
 export async function promptAndCommit(
   feature: Feature,
   projectDir: string,
+  featureId?: string,
 ): Promise<boolean> {
   if (!isGitRepo(projectDir)) {
     return false;
@@ -105,7 +109,7 @@ export async function promptAndCommit(
     return false;
   }
 
-  const message = buildCommitMessage(feature);
+  const message = buildCommitMessage(feature, featureId);
 
   uiStore.setStatusMessage(`Commit: "${message}"`);
   const shouldCommit = await uiStore.showCommitPrompt(message);

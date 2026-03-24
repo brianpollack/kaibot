@@ -76,7 +76,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("KaiBot — ensureFeaturesDir", () => {
-  it("creates features/ dir if it does not exist", () => {
+  it("creates features/ dir and subdirectories if they do not exist", () => {
     rmSync(featuresDir, { recursive: true, force: true });
     expect(existsSync(featuresDir)).toBe(false);
 
@@ -84,6 +84,10 @@ describe("KaiBot — ensureFeaturesDir", () => {
     priv(bot).ensureFeaturesDir();
 
     expect(existsSync(featuresDir)).toBe(true);
+    expect(existsSync(join(featuresDir, "inprogress"))).toBe(true);
+    expect(existsSync(join(featuresDir, "complete"))).toBe(true);
+    expect(existsSync(join(featuresDir, "hold"))).toBe(true);
+    expect(existsSync(join(featuresDir, "log"))).toBe(true);
   });
 
   it("does not throw if features/ already exists", () => {
@@ -97,24 +101,6 @@ describe("KaiBot — ensureFeaturesDir", () => {
 // ---------------------------------------------------------------------------
 
 describe("KaiBot — checkForNewFeatures", () => {
-  it("ignores _inprogress.md files", async () => {
-    writeFileSync(join(featuresDir, "my_feature_inprogress.md"), "# Feature\n");
-
-    const bot = new KaiBot(tmpDir);
-    await priv(bot).checkForNewFeatures();
-
-    expect(mockProcessFeature).not.toHaveBeenCalled();
-  });
-
-  it("ignores _complete.md files", async () => {
-    writeFileSync(join(featuresDir, "my_feature_complete.md"), "# Feature\n");
-
-    const bot = new KaiBot(tmpDir);
-    await priv(bot).checkForNewFeatures();
-
-    expect(mockProcessFeature).not.toHaveBeenCalled();
-  });
-
   it("ignores non-.md files", async () => {
     writeFileSync(join(featuresDir, "notes.txt"), "some text");
 
@@ -161,7 +147,7 @@ describe("KaiBot — checkForNewFeatures", () => {
 // ---------------------------------------------------------------------------
 
 describe("KaiBot — handleFeature state transitions", () => {
-  it("renames .md to _inprogress before calling processFeature", async () => {
+  it("moves .md to inprogress/ before calling processFeature", async () => {
     let capturedFilePath: string | undefined;
     let inprogressExistedDuringCall = false;
     let originalExistedDuringCall = false;
@@ -169,7 +155,9 @@ describe("KaiBot — handleFeature state transitions", () => {
     mockProcessFeature.mockImplementation(async (feature) => {
       capturedFilePath = feature.filePath;
       // Check file state at the moment processFeature is called
-      inprogressExistedDuringCall = existsSync(join(featuresDir, "auth_flow_inprogress.md"));
+      inprogressExistedDuringCall = existsSync(
+        join(featuresDir, "inprogress", "auth_flow.md"),
+      );
       originalExistedDuringCall = existsSync(join(featuresDir, "auth_flow.md"));
       return stubStats;
     });
@@ -180,12 +168,12 @@ describe("KaiBot — handleFeature state transitions", () => {
     bypassSettleDelay(bot, "auth_flow");
     await priv(bot).checkForNewFeatures();
 
-    expect(capturedFilePath).toMatch(/_inprogress\.md$/);
+    expect(capturedFilePath).toContain(join("inprogress", "auth_flow.md"));
     expect(inprogressExistedDuringCall).toBe(true);
     expect(originalExistedDuringCall).toBe(false);
   });
 
-  it("moves _inprogress to features/complete/ on success", async () => {
+  it("moves from inprogress/ to complete/ on success", async () => {
     mockProcessFeature.mockResolvedValueOnce(stubStats);
 
     writeFileSync(join(featuresDir, "auth_flow.md"), "# Auth Flow\n");
@@ -195,10 +183,10 @@ describe("KaiBot — handleFeature state transitions", () => {
     await priv(bot).checkForNewFeatures();
 
     expect(existsSync(join(featuresDir, "complete", "auth_flow.md"))).toBe(true);
-    expect(existsSync(join(featuresDir, "auth_flow_inprogress.md"))).toBe(false);
+    expect(existsSync(join(featuresDir, "inprogress", "auth_flow.md"))).toBe(false);
   });
 
-  it("leaves file as _inprogress on processFeature error", async () => {
+  it("moves file to hold/ on processFeature error", async () => {
     mockProcessFeature.mockRejectedValueOnce(new Error("agent failure"));
 
     writeFileSync(join(featuresDir, "broken_feature.md"), "# Broken\n");
@@ -207,8 +195,8 @@ describe("KaiBot — handleFeature state transitions", () => {
     bypassSettleDelay(bot, "broken_feature");
     await priv(bot).checkForNewFeatures();
 
-    expect(existsSync(join(featuresDir, "broken_feature_inprogress.md"))).toBe(true);
-    expect(existsSync(join(featuresDir, "complete", "broken_feature.md"))).toBe(false);
+    expect(existsSync(join(featuresDir, "hold", "broken_feature.md"))).toBe(true);
+    expect(existsSync(join(featuresDir, "inprogress", "broken_feature.md"))).toBe(false);
   });
 });
 

@@ -1,12 +1,18 @@
 import { execSync } from "child_process";
-import { randomUUID } from "crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 import { appendChangelog } from "./changelog.js";
 import { extractFeatureDescription, promptAndCommit } from "./commit.js";
 import { getGitBranch, getLastCommitHash } from "./git.js";
-import { isNewFeatureFile, markComplete, markInProgress, parseFeature } from "./feature.js";
+import {
+  generateFeatureId,
+  isNewFeatureFile,
+  markComplete,
+  markHold,
+  markInProgress,
+  parseFeature,
+} from "./feature.js";
 import { appendFeatureRecord } from "./featureDb.js";
 import { generateSummary, processFeature } from "./KaiAgent.js";
 import {
@@ -51,14 +57,19 @@ export class KaiBot {
 
   private running = false;
 
-  constructor(projectDir: string, model = "claude-opus-4-6") {
+  constructor(projectDir: string, model = "claude-opus-4-6", useLinear = false) {
     this.projectDir = projectDir;
     this.featuresDir = join(projectDir, "features");
     this.model = model;
 
-    const linearCfg = getLinearConfigFromEnv();
-    this.linearClient = linearCfg ? new LocalLinearClient(linearCfg.apiKey) : null;
-    this.linearTeamRef = linearCfg?.teamRef ?? null;
+    if (useLinear) {
+      const linearCfg = getLinearConfigFromEnv();
+      this.linearClient = linearCfg ? new LocalLinearClient(linearCfg.apiKey) : null;
+      this.linearTeamRef = linearCfg?.teamRef ?? null;
+    } else {
+      this.linearClient = null;
+      this.linearTeamRef = null;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -127,8 +138,11 @@ export class KaiBot {
   }
 
   private ensureFeaturesDir(): void {
-    if (!existsSync(this.featuresDir)) {
-      mkdirSync(this.featuresDir, { recursive: true });
+    for (const sub of ["", "inprogress", "complete", "hold", "log"]) {
+      const dir = sub ? join(this.featuresDir, sub) : this.featuresDir;
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
     }
   }
 
@@ -187,7 +201,7 @@ export class KaiBot {
       const summary = await generateSummary(feature, this.projectDir);
 
       appendFeatureRecord(this.projectDir, {
-        id: randomUUID(),
+        id: generateFeatureId(),
         requestedAt: issue.createdAt,
         completedAt: new Date().toISOString(),
         executionTimeMs: stats.durationMs,
@@ -284,6 +298,10 @@ export class KaiBot {
   private async handleFeatureFile(filePath: string, requestedAt: string): Promise<void> {
     let feature = parseFeature(filePath);
 
+    // Assign a unique feature ID
+    const featureId = generateFeatureId();
+    feature.featureId = featureId;
+
     // Capture description and git branch before the agent modifies the file
     let featureDescription = feature.name;
     try {
@@ -295,24 +313,29 @@ export class KaiBot {
     try {
       uiStore.setStatus("processing");
       uiStore.setFeatureName(feature.name);
-      uiStore.setStatusMessage(`Processing: ${feature.name}`);
+      uiStore.setStatusMessage(`Processing: ${feature.name} [${featureId}]`);
 
       feature = markInProgress(feature);
+      feature.featureId = featureId;
+
+      // Prepend Feature ID to the file content
+      this.prependFeatureId(feature.filePath, featureId);
 
       const stats = await processFeature(feature, this.projectDir, this.model);
 
       feature = markComplete(feature);
+      feature.featureId = featureId;
       appendChangelog(feature, this.projectDir);
       const changedFiles = getNewlyChangedFiles(this.projectDir, preExistingChanges);
 
       // Offer to auto-commit; defaults to Yes after 5s timeout
-      const committed = await promptAndCommit(feature, this.projectDir);
+      const committed = await promptAndCommit(feature, this.projectDir, featureId);
       const gitCommitHash = committed ? getLastCommitHash(this.projectDir) : null;
 
       const summary = await generateSummary(feature, this.projectDir);
 
-      appendFeatureRecord(this.projectDir, {
-        id: randomUUID(),
+      const record = {
+        id: featureId,
         requestedAt,
         completedAt: new Date().toISOString(),
         executionTimeMs: stats.durationMs,
@@ -329,15 +352,20 @@ export class KaiBot {
         gitCommitHash,
         description: featureDescription,
         planPoints: stats.planPoints,
-        source: "file",
+        source: "file" as const,
         linearIssueId: null,
         linearIdentifier: null,
-        status: "success",
+        status: "success" as const,
         errorMessage: null,
         summary,
-      });
+      };
 
-      uiStore.setStatusMessage(`Complete: ${feature.name}`);
+      appendFeatureRecord(this.projectDir, record);
+
+      // Write summary log JSON to features/log/<featureId>.json
+      this.writeFeatureLog(featureId, record);
+
+      uiStore.setStatusMessage(`Complete: ${feature.name} [${featureId}]`);
       uiStore.resetFeature();
       uiStore.setStatus("watching");
       uiStore.setStatusMessage(this.getWatchingMessage());
@@ -350,13 +378,57 @@ export class KaiBot {
         this.stop();
         process.exit(1);
       }
+
+      // Move to hold/ folder with an Information Needed section
+      const errMsg = err instanceof Error ? err.message : String(err);
+      try {
+        this.appendInformationNeeded(feature.filePath, errMsg);
+        feature = markHold(feature);
+        feature.featureId = featureId;
+      } catch {
+        // If markHold fails, leave file where it is
+      }
+
       uiStore.setStatus("error");
       uiStore.setStatusMessage(
-        `Error processing "${feature.name}" — file left at: ${feature.filePath}`,
+        `Error processing "${feature.name}" — moved to hold: ${feature.filePath}`,
       );
       // Reset to watching after a brief pause so the error is visible
       uiStore.setStatus("watching");
       uiStore.setStatusMessage(this.getWatchingMessage());
+    }
+  }
+
+  /** Prepend a Feature ID line to the top of a feature file. */
+  private prependFeatureId(filePath: string, featureId: string): void {
+    try {
+      const content = readFileSync(filePath, "utf8");
+      writeFileSync(filePath, `Feature ID: ${featureId}\n\n${content}`);
+    } catch {
+      // Ignore if file can't be read/written
+    }
+  }
+
+  /** Append an ## Information Needed section to a feature file. */
+  private appendInformationNeeded(filePath: string, errorMessage: string): void {
+    try {
+      const content = readFileSync(filePath, "utf8");
+      const section = `\n\n## Information Needed\n\nProcessing failed with the following error:\n\n> ${errorMessage}\n\nPlease resolve the issue and move this file back to the \`features/\` folder to retry.\n`;
+      writeFileSync(filePath, content + section);
+    } catch {
+      // Ignore if file can't be read/written
+    }
+  }
+
+  /** Write a summary log JSON to features/log/<featureId>.json */
+  private writeFeatureLog(featureId: string, record: Record<string, unknown>): void {
+    try {
+      const logDir = join(this.featuresDir, "log");
+      mkdirSync(logDir, { recursive: true });
+      const logPath = join(logDir, `${featureId}.json`);
+      writeFileSync(logPath, JSON.stringify(record, null, 2) + "\n");
+    } catch {
+      // Non-critical — ignore errors
     }
   }
 }

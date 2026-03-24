@@ -99,6 +99,13 @@ There is no need to add test cases for UI related changes.  If you are
 just changing something in design, layout, font, color, output style, or
 anything that does not change functional logic, do not create new tests.
 
+## Front End Design
+
+The following applies to front end design (UI, Web UI, etc)
+
+- Avoid Animations, Fast, clean, and minimum UI is better with a quick response time as priority
+- Always use Accessible features, aria, and code comments with HTML.  UI should be screen reader compatible
+
 ## Final Rule
 
 Write code that a senior engineer would confidently approve in a production code review.
