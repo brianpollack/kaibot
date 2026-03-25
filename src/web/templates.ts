@@ -254,7 +254,7 @@ export function renderMainPage(server: WebServer): string {
         <div id="settings-editor-area">
           <div id="settings-editor-toolbar">
             <span id="settings-file-label"></span>
-            <button id="settings-save-btn" class="settings-save-btn">&#x1F4BE; Save</button>
+            <button id="settings-save-btn" class="settings-save-btn">Save</button>
           </div>
           <div id="settings-editor"></div>
         </div>

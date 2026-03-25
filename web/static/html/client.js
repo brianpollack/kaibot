@@ -931,7 +931,13 @@ function initSettingsEditor() {
   settingsAceEditor.setOptions({
     fontSize: "13px",
     showLineNumbers: true,
+    showPrintMargin: false,
     wrap: false,
+  });
+  settingsAceEditor.commands.addCommand({
+    name: "saveSettings",
+    bindKey: { win: "Ctrl-S", mac: "Cmd-S" },
+    exec: function () { saveSettingsFile(); },
   });
   settingsAceEditor.on("change", function () {
     if (!settingsCurrentFile) return;
@@ -1807,6 +1813,13 @@ function handleNpmMessage(msg) {
 // ---------------------------------------------------------------------------
 
 document.addEventListener("keydown", function (e) {
+  // Ctrl+S in settings view — save current file
+  if (currentView === "settings" && e.key === "s" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    saveSettingsFile();
+    return;
+  }
+
   // Ctrl+Enter in follow-up textarea — send message
   if (e.target && e.target.id === "followup-textarea" && e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();

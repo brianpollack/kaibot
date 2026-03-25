@@ -127,3 +127,6 @@ Updated `web/static/css/main.css` to use `web/static/images/KaiBackground.jpg` a
 March 24th, 2026: main: brian
 Added a cost column to the features history list in the web UI. The `CompleteFeature` interface in `src/web/routes.ts` now includes `totalCostUsd`, which is read from the feature log JSON files. The client-side `renderCompleteFeatures()` in `web/static/html/client.js` displays the cost as a green badge on the right side of each feature item using a new `formatCost()` helper. CSS styling was added in `web/static/css/main.css` with the `.feature-list-cost` class matching the existing design language.
 
+March 25th, 2026: main: brian
+Added Ctrl+S (Cmd+S on Mac) as a keyboard shortcut to save the current file in the settings editor, both at the document level and as an Ace editor command binding. Removed the floppy disk icon from the Save button in the settings toolbar. Disabled the print margin line in the Ace editor by setting `showPrintMargin: false`.
+
