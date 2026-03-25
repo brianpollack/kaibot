@@ -2,6 +2,9 @@ import type { WebSocket, WebSocketServer } from "ws";
 
 import { uiStore, type ConversationItem, type UIState } from "../ui/store.js";
 import { getTodaySpend } from "./spendTracker.js";
+import type { NpmCommandRunner } from "./NpmCommandRunner.js";
+import { closeSession, hasSession, sendFollowup } from "./followupSession.js";
+import { verifyWsHmac } from "./hmac.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,6 +27,7 @@ export interface WebUIState {
   conversationItems: ConversationItem[];
   statusMessage: string;
   todaySpend: number;
+  followupFeatureId: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +58,7 @@ export function getWebState(): WebUIState {
     conversationItems: s.conversationItems,
     statusMessage: s.statusMessage,
     todaySpend: getTodaySpend(s.projectDir),
+    followupFeatureId: s.followupFeatureId,
   };
 }
 
@@ -73,17 +78,36 @@ function broadcast(): void {
   }
 }
 
+function broadcastRaw(payload: unknown): void {
+  if (clients.size === 0) return;
+  const msg = JSON.stringify(payload);
+  for (const client of clients) {
+    if (client.readyState === 1) client.send(msg);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
 
 /**
- * Register WebSocket handlers and subscribe to uiStore changes.
+ * Register WebSocket handlers and subscribe to uiStore + NpmCommandRunner changes.
  * Call once during server startup.
  */
-export function setupWebSocketHandler(wss: WebSocketServer): void {
+export function setupWebSocketHandler(wss: WebSocketServer, npmRunner: NpmCommandRunner, hmacSecret: string): void {
   // Subscribe to uiStore changes and broadcast to all clients
   uiStore.on("change", broadcast);
+
+  // Subscribe to npm runner events and broadcast to all clients
+  npmRunner.on("output", ({ script, chunk }: { script: string; chunk: string }) => {
+    broadcastRaw({ type: "npm-output", script, chunk });
+  });
+  npmRunner.on("status", ({ script, status, exitCode }: { script: string; status: string; exitCode: number | null }) => {
+    broadcastRaw({ type: "npm-status", script, status, exitCode });
+  });
+  npmRunner.on("clear", ({ script }: { script: string }) => {
+    broadcastRaw({ type: "npm-clear", script });
+  });
 
   wss.on("connection", (ws: WebSocket) => {
     clients.add(ws);
@@ -95,11 +119,29 @@ export function setupWebSocketHandler(wss: WebSocketServer): void {
     ws.on("message", (raw: Buffer | string) => {
       try {
         const msg = JSON.parse(typeof raw === "string" ? raw : raw.toString());
+        if (!verifyWsHmac(hmacSecret, msg as Record<string, unknown>)) return;
         if (msg.type === "select-model" && typeof msg.model === "string") {
           uiStore.selectModel(msg.model);
         }
         if (msg.type === "select-provider" && typeof msg.provider === "string") {
           uiStore.selectProvider(msg.provider);
+        }
+        if (msg.type === "npm-start" && typeof msg.script === "string") {
+          npmRunner.start(msg.script);
+        }
+        if (msg.type === "npm-stop" && typeof msg.script === "string") {
+          npmRunner.stop(msg.script);
+        }
+        if (msg.type === "npm-restart" && typeof msg.script === "string") {
+          npmRunner.restart(msg.script);
+        }
+        if (msg.type === "feature-followup" && typeof msg.featureId === "string" && typeof msg.message === "string") {
+          if (hasSession(msg.featureId)) {
+            sendFollowup(msg.featureId, msg.message).catch(() => {});
+          }
+        }
+        if (msg.type === "feature-close" && typeof msg.featureId === "string") {
+          closeSession(msg.featureId);
         }
       } catch {
         // Ignore malformed messages

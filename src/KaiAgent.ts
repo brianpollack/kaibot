@@ -83,8 +83,9 @@ export async function processFeature(
   projectDir: string,
   model: string,
   options: ProcessFeatureOptions = {},
+  existingClient?: KaiClient,
 ): Promise<AgentStats> {
-  const client = KaiClient.create(projectDir, model, options.provider);
+  const client = existingClient ?? KaiClient.create(projectDir, model, options.provider);
   const prompt = buildPrompt(feature, projectDir);
   const startTime = Date.now();
 
@@ -195,7 +196,7 @@ export async function processFeature(
 
 const FILE_TOOLS = new Set(["Read", "Write", "Edit"]);
 
-function routeToolUse(name: string, input: Record<string, unknown> | undefined): void {
+export function routeToolUse(name: string, input: Record<string, unknown> | undefined): void {
   if (name === "Bash") {
     const cmd = typeof input?.command === "string" ? input.command : "(unknown)";
     uiStore.pushCommand(cmd);
@@ -206,6 +207,20 @@ function routeToolUse(name: string, input: Record<string, unknown> | undefined):
     const opType = name.toLowerCase() as "read" | "write" | "edit";
     const preview = getFileOpPreview(name, input);
     uiStore.pushFileOp({ type: opType, path: basename(filePath), preview });
+    // Record Write/Edit events in the conversation timeline, skipping features/ tracking files
+    const inFeaturesDir = /[/\\]features[/\\]|^features[/\\]/.test(filePath);
+    if (!inFeaturesDir && name === "Edit") {
+      const oldStr = typeof input?.old_string === "string" ? input.old_string.slice(0, 400) : "";
+      const newStr = typeof input?.new_string === "string" ? input.new_string.slice(0, 400) : "";
+      uiStore.pushConversationFileOp("Edit", filePath, { old: oldStr, new: newStr });
+    } else if (!inFeaturesDir && name === "Write") {
+      const content = typeof input?.content === "string" ? input.content : "";
+      const lines = content.split("\n").length;
+      uiStore.pushConversationFileOp("Write", filePath, {
+        preview: content.slice(0, 400),
+        lines,
+      });
+    }
   } else if (name === "Agent") {
     const subagentType =
       typeof input?.subagent_type === "string" ? input.subagent_type : "unknown";

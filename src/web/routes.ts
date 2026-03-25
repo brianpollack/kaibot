@@ -1,8 +1,10 @@
+import { execFileSync } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { type IncomingMessage, type ServerResponse } from "http";
 import { extname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
+import { verifyRequestHmac } from "./hmac.js";
 import { renderMainPage } from "./templates.js";
 import { getWebState } from "./wsHandler.js";
 import type { WebServer } from "./WebServer.js";
@@ -41,6 +43,7 @@ const MIME_TYPES: Record<string, string> = {
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const WEB_ROOT = resolve(__dirname, "../../web");
+const KAIBOT_ROOT = resolve(__dirname, "../..");
 
 // ---------------------------------------------------------------------------
 // No-cache headers — ensure every response expires immediately
@@ -54,6 +57,32 @@ const NO_CACHE_HEADERS: Record<string, string> = {
 
 function isProviderName(value: string): value is ProviderName {
   return value === "anthropic" || value === "openrouter";
+}
+
+// ---------------------------------------------------------------------------
+// HMAC verification helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify the HMAC signature on an API request. Sends a 401 and returns false
+ * when verification fails. Returns true (and does nothing) when it passes or
+ * when the server has no secret configured (test mode).
+ */
+function checkHmac(
+  req: IncomingMessage,
+  url: URL,
+  body: string,
+  secret: string,
+  res: ServerResponse,
+): boolean {
+  const timestamp = String(req.headers["x-kaibot-timestamp"] ?? "");
+  const signature = String(req.headers["x-kaibot-signature"] ?? "");
+  if (!verifyRequestHmac(secret, req.method ?? "GET", url.pathname + url.search, timestamp, body, signature)) {
+    res.writeHead(401, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+    res.end(JSON.stringify({ error: "Unauthorized" }));
+    return false;
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +127,7 @@ export function handleRequest(
 
   // ── API: current state (for initial load) ──────────────────────────
   if (pathname === "/api/state") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
     res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
     res.end(JSON.stringify(getWebState()));
     return;
@@ -105,6 +135,7 @@ export function handleRequest(
 
   // ── API: available models (returns models for the current provider) ─
   if (pathname === "/api/models") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
     const providerParam = url.searchParams.get("provider");
     const provider = providerParam && isProviderName(providerParam)
       ? providerParam
@@ -134,6 +165,7 @@ export function handleRequest(
 
   // ── API: available providers ─────────────────────────────────────────
   if (pathname === "/api/providers") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
     res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
     res.end(JSON.stringify(getAvailableProviders()));
     return;
@@ -141,8 +173,71 @@ export function handleRequest(
 
   // ── API: features list (pending + complete) ────────────────────────
   if (pathname === "/api/features" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
     res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
     res.end(JSON.stringify(getFeaturesList(server.projectDir)));
+    return;
+  }
+
+  // ── API: feature detail ────────────────────────────────────────────
+  const featureDetailMatch = /^\/api\/features\/([a-zA-Z0-9_-]+)$/.exec(pathname);
+  if (featureDetailMatch && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    const id = featureDetailMatch[1];
+    const logDir = join(server.projectDir, "features", "log");
+    const filePath = join(logDir, `${id}.json`);
+    if (!existsSync(filePath)) {
+      res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Feature not found" }));
+      return;
+    }
+    try {
+      const raw = readFileSync(filePath, "utf-8");
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(raw);
+    } catch {
+      res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Failed to read feature" }));
+    }
+    return;
+  }
+
+  // ── API: feature git info ──────────────────────────────────────────
+  const featureGitMatch = /^\/api\/features\/([a-zA-Z0-9_-]+)\/git$/.exec(pathname);
+  if (featureGitMatch && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    const id = featureGitMatch[1];
+    const logDir = join(server.projectDir, "features", "log");
+    const filePath = join(logDir, `${id}.json`);
+    if (!existsSync(filePath)) {
+      res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Feature not found" }));
+      return;
+    }
+    try {
+      const data = JSON.parse(readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+      const hash = String(data["gitCommitHash"] ?? "").trim();
+      if (!hash) {
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error: "No commit hash recorded for this feature" }));
+        return;
+      }
+      const gitDir = server.projectDir;
+      const runGit = (...args: string[]) => {
+        try {
+          return execFileSync("git", args, { cwd: gitDir, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+        } catch {
+          return "";
+        }
+      };
+      const show = runGit("show", "--stat", "--format=fuller", hash);
+      const diff = runGit("show", "--format=", hash);
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ hash, show, diff }));
+    } catch {
+      res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Failed to read git info" }));
+    }
     return;
   }
 
@@ -150,6 +245,7 @@ export function handleRequest(
   if (pathname === "/api/features" && req.method === "POST") {
     readBody(req)
       .then((body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
         const data = JSON.parse(body) as Record<string, unknown>;
         const title = String(data["title"] ?? "").trim();
         const description = String(data["description"] ?? "").trim();
@@ -178,6 +274,92 @@ export function handleRequest(
         res.end(JSON.stringify({ error: "Invalid request body" }));
       });
     return;
+  }
+
+  // ── API: settings file read ───────────────────────────────────────
+  if (pathname === "/api/settings/file" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    const fileKey = url.searchParams.get("path") ?? "";
+    const resolvedPath = resolveSettingsFilePath(fileKey, server.projectDir);
+    if (!resolvedPath) {
+      res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Invalid file path" }));
+      return;
+    }
+    try {
+      const content = existsSync(resolvedPath) ? readFileSync(resolvedPath, "utf-8") : "";
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ content }));
+    } catch {
+      res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Failed to read file" }));
+    }
+    return;
+  }
+
+  // ── API: settings file write ──────────────────────────────────────
+  if (pathname === "/api/settings/file" && req.method === "POST") {
+    readBody(req)
+      .then((body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const fileKey = String(data["path"] ?? "").trim();
+        const content = String(data["content"] ?? "");
+        const resolvedPath = resolveSettingsFilePath(fileKey, server.projectDir);
+        if (!resolvedPath) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: "Invalid file path" }));
+          return;
+        }
+        try {
+          mkdirSync(resolve(resolvedPath, ".."), { recursive: true });
+          writeFileSync(resolvedPath, content, "utf-8");
+          res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ ok: true }));
+        } catch {
+          res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: "Failed to write file" }));
+        }
+      })
+      .catch(() => {
+        res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error: "Invalid request body" }));
+      });
+    return;
+  }
+
+  // ── API: npm scripts list ─────────────────────────────────────────
+  if (pathname === "/api/npm-scripts" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+    res.end(JSON.stringify(server.npmRunner.getScripts()));
+    return;
+  }
+
+  // ── API: npm script control & output ──────────────────────────────
+  const npmMatch = pathname.match(/^\/api\/npm-scripts\/([^/]+)\/(start|stop|restart|output)$/);
+  if (npmMatch) {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    const name = decodeURIComponent(npmMatch[1]);
+    const action = npmMatch[2];
+
+    if (action === "output" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({
+        output: server.npmRunner.getOutput(name),
+        info: server.npmRunner.getInfo(name),
+      }));
+      return;
+    }
+
+    if (req.method === "POST") {
+      if (action === "start")   server.npmRunner.start(name);
+      if (action === "stop")    server.npmRunner.stop(name);
+      if (action === "restart") server.npmRunner.restart(name);
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
   }
 
   // ── Static files: /static/* and /vendor/* ──────────────────────────
@@ -315,6 +497,23 @@ function getFeaturesList(projectDir: string): FeaturesList {
   });
 
   return { pending, complete };
+}
+
+// ---------------------------------------------------------------------------
+// Settings file path resolver — strict allowlist, no path traversal possible
+// ---------------------------------------------------------------------------
+
+const SETTINGS_FILE_KEYS: Record<string, (projectDir: string) => string> = {
+  "CLAUDE.md":           (projectDir) => join(projectDir, "CLAUDE.md"),
+  "README.md":           (projectDir) => join(projectDir, "README.md"),
+  ".kaibot/PROMPT.md":   (projectDir) => join(projectDir, ".kaibot", "PROMPT.md"),
+  "system_prompt.md":    (_projectDir) => join(KAIBOT_ROOT, "prompts", "system_prompt.md"),
+};
+
+function resolveSettingsFilePath(key: string, projectDir: string): string | null {
+  const resolver = SETTINGS_FILE_KEYS[key];
+  if (!resolver) return null;
+  return resolver(projectDir);
 }
 
 // ---------------------------------------------------------------------------

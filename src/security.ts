@@ -19,6 +19,7 @@ const ALLOWED_COMMANDS = new Set([
   "rm",
   "touch",
   "chmod",
+  "cd",
   // Search
   "grep",
   "rg",
@@ -37,6 +38,10 @@ const ALLOWED_COMMANDS = new Set([
   "pip3",
   // Git
   "git",
+  // Elixir
+  "mix",
+  "elixir",
+  "iex",
   // Network (read-only)
   "curl",
   "wget",

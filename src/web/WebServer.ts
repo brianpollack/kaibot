@@ -1,7 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "http";
+import { randomBytes } from "crypto";
 
 import { WebSocketServer } from "ws";
 
+import { NpmCommandRunner } from "./NpmCommandRunner.js";
 import { handleRequest } from "./routes.js";
 import { setupWebSocketHandler } from "./wsHandler.js";
 
@@ -34,6 +36,8 @@ export class WebServer {
   private readonly port: number;
   private readonly host: string;
   readonly projectDir: string;
+  readonly npmRunner: NpmCommandRunner;
+  readonly hmacSecret: string;
   model: string;
 
   constructor(opts: WebServerOptions) {
@@ -41,13 +45,15 @@ export class WebServer {
     this.host = opts.host ?? "127.0.0.1";
     this.projectDir = opts.projectDir;
     this.model = opts.model;
+    this.npmRunner = new NpmCommandRunner(opts.projectDir);
+    this.hmacSecret = randomBytes(32).toString("hex");
 
     this.server = createServer((req: IncomingMessage, res: ServerResponse) => {
       handleRequest(req, res, this);
     });
 
     this.wss = new WebSocketServer({ server: this.server });
-    setupWebSocketHandler(this.wss);
+    setupWebSocketHandler(this.wss, this.npmRunner, this.hmacSecret);
   }
 
   // -------------------------------------------------------------------------
@@ -67,6 +73,7 @@ export class WebServer {
 
   /** Gracefully shut down the server. */
   stop(): Promise<void> {
+    this.npmRunner.stopAll();
     return new Promise((resolve) => {
       // Close all WebSocket connections
       for (const client of this.wss.clients) {

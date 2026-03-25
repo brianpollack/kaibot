@@ -4,6 +4,7 @@ import { join } from "path";
 
 import { appendChangelog } from "./changelog.js";
 import { extractFeatureDescription, promptAndCommit } from "./commit.js";
+import { KaiClient } from "./KaiClient.js";
 import { getGitBranch, getLastCommitHash } from "./git.js";
 import {
   generateFeatureId,
@@ -15,6 +16,7 @@ import {
 } from "./feature.js";
 import { appendFeatureRecord } from "./featureDb.js";
 import { generateSummary, generateTitle, processFeature } from "./KaiAgent.js";
+import { closeSession, registerSession } from "./web/followupSession.js";
 import {
   buildLinearPlanComment,
   buildLinearCompletionComment,
@@ -362,7 +364,9 @@ export class KaiBot {
       // Prepend Feature ID to the file content
       this.prependFeatureId(feature.filePath, featureId);
 
-      const stats = await processFeature(feature, this.projectDir, this.model, { provider: this.provider });
+      // Create a named client so we can reuse it for follow-up prompts later
+      const agentClient = KaiClient.create(this.projectDir, this.model, this.provider);
+      const stats = await processFeature(feature, this.projectDir, this.model, { provider: this.provider }, agentClient);
 
       feature = markComplete(feature);
       feature.featureId = featureId;
@@ -412,14 +416,27 @@ export class KaiBot {
       appendFeatureRecord(this.projectDir, record);
 
       // Write summary log JSON to features/log/<featureId>.json
+      const logPath = join(this.featuresDir, "log", `${featureId}.json`);
       this.writeFeatureLog(featureId, record);
 
       const displayName = featureTitle || feature.name;
-      uiStore.setStatusMessage(`Complete: ${displayName} [${featureId}]`);
+      uiStore.setStatusMessage(`Complete: ${displayName} [${featureId}] — awaiting follow-up`);
+
+      // Keep the agent alive for follow-up prompts until the user closes the session
+      uiStore.setFollowupFeatureId(featureId);
+      await new Promise<void>((resolve) => {
+        registerSession(featureId, agentClient, logPath, resolve);
+      });
+
+      // Session was closed by the user — clean up
       uiStore.resetFeature();
       uiStore.setStatus("watching");
       uiStore.setStatusMessage(this.getWatchingMessage());
     } catch (err) {
+      // Ensure any open follow-up session is closed on error
+      closeSession(featureId);
+      uiStore.setFollowupFeatureId(null);
+
       if (isAuthError(err)) {
         uiStore.setStatus("error");
         uiStore.setStatusMessage(

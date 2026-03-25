@@ -44,7 +44,7 @@ export interface PlanLine {
   text: string;
 }
 
-export type ConversationItemType = "thinking" | "command" | "agent" | "git" | "system";
+export type ConversationItemType = "thinking" | "command" | "agent" | "git" | "system" | "user" | "file";
 
 export interface ConversationItem {
   type: ConversationItemType;
@@ -136,6 +136,9 @@ export interface UIState {
 
   // Status message (bottom bar)
   statusMessage: string;
+
+  /** Feature ID currently awaiting follow-up prompts from the user, or null. */
+  followupFeatureId: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +180,7 @@ class UIStore extends EventEmitter {
     isSelectingProvider: false,
     isScanningTechDebt: false,
     statusMessage: "",
+    followupFeatureId: null,
   };
 
   getState(): Readonly<UIState> {
@@ -383,6 +387,34 @@ class UIStore extends EventEmitter {
     }
   }
 
+  /**
+   * Append a file change event (Write or Edit) to the conversation.
+   * `details` is a plain object that will be JSON-serialised as the content.
+   */
+  pushConversationFileOp(tool: string, filePath: string, details: Record<string, unknown>): void {
+    const content = JSON.stringify({ tool, path: filePath, ...details });
+    this.state.conversationItems = [
+      ...this.state.conversationItems,
+      { type: "file" as const, content, timestamp: Date.now() },
+    ].slice(-MAX_CONVERSATION_ITEMS);
+    this.emitChange();
+  }
+
+  /** Append a user follow-up message to the conversation. */
+  pushConversationUser(message: string): void {
+    this.state.conversationItems = [
+      ...this.state.conversationItems,
+      { type: "user" as const, content: message, timestamp: Date.now() },
+    ].slice(-MAX_CONVERSATION_ITEMS);
+    this.emitChange();
+  }
+
+  /** Set the feature ID awaiting follow-up, or null to clear. */
+  setFollowupFeatureId(id: string | null): void {
+    this.state.followupFeatureId = id;
+    this.emitChange();
+  }
+
   /** Append a git commit message to the conversation. */
   pushConversationGit(message: string): void {
     this.state.conversationItems = [
@@ -570,6 +602,7 @@ class UIStore extends EventEmitter {
     this.state.isSelectingProvider = false;
     this.state.isScanningTechDebt = false;
     this.state.statusMessage = "";
+    this.state.followupFeatureId = null;
     this.emitChange();
   }
 

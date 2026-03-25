@@ -40,7 +40,7 @@ function mockRes(): MockRes {
 }
 
 function fakeServer(projectDir = "/tmp/test-project"): WebServer {
-  return { projectDir, model: "claude-haiku-4-5" } as unknown as WebServer;
+  return { projectDir, model: "claude-haiku-4-5", hmacSecret: "" } as unknown as WebServer;
 }
 
 // ---------------------------------------------------------------------------

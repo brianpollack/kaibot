@@ -189,6 +189,112 @@ ul { list-style: none; }
   color: #6B7280;
 }
 
+.nav-divider {
+  border-top: 1px solid #2A344A;
+  margin: 6px 8px;
+  list-style: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Settings view
+   --------------------------------------------------------------------------- */
+
+#settings-view {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  background: #0B0F1A;
+}
+
+#settings-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#settings-tab-bar {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  padding: 8px 12px 0;
+  background: #121826;
+  border-bottom: 1px solid #2A344A;
+  flex-shrink: 0;
+}
+
+.settings-tab {
+  padding: 6px 14px;
+  background: #1A2233;
+  border: 1px solid #2A344A;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  color: #9CA3AF;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-tab:hover {
+  background: #243050;
+  color: #E2E8F0;
+}
+
+.settings-tab.active {
+  background: #0B0F1A;
+  color: #E2E8F0;
+  border-color: #2A344A;
+}
+
+.settings-tab.dirty::before {
+  content: "* ";
+  color: #F59E0B;
+}
+
+#settings-editor-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#settings-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #121826;
+  border-bottom: 1px solid #2A344A;
+  flex-shrink: 0;
+}
+
+#settings-file-label {
+  font-size: 12px;
+  color: #9CA3AF;
+  font-family: monospace;
+}
+
+.settings-save-btn {
+  padding: 4px 12px;
+  background: #2563EB;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.settings-save-btn:hover {
+  background: #1D4ED8;
+}
+
+#settings-editor {
+  flex: 1;
+  overflow: hidden;
+  font-size: 13px;
+}
+
 /* ---------------------------------------------------------------------------
    Dock container (main content area) — flex row of resizable columns
    --------------------------------------------------------------------------- */
@@ -437,6 +543,80 @@ ul { list-style: none; }
   word-break: break-word;
 }
 
+/* File change event block */
+.conv-file {
+  margin: 4px 0;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid #1E2E1E;
+  font-size: 11px;
+}
+
+.conv-file-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: #0B180B;
+}
+
+.conv-file-op {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.conv-file-op.edit  { background: #1A1400; color: #F59E0B; }
+.conv-file-op.write { background: #001A08; color: #34D399; }
+
+.conv-file-path {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 10.5px;
+  color: #9CA3AF;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.conv-file-body {
+  background: #080E08;
+  padding: 5px 10px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.conv-file-section-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #4B5563;
+  margin-bottom: 2px;
+  margin-top: 4px;
+}
+
+.conv-file-section-label:first-child { margin-top: 0; }
+
+.conv-file-snippet {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 3px 6px;
+  border-radius: 3px;
+  margin-bottom: 2px;
+}
+
+.conv-file-snippet.old { background: #1A0707; color: #FCA5A5; }
+.conv-file-snippet.new { background: #071A0A; color: #86EFAC; }
+.conv-file-snippet.content { background: #071A0A; color: #86EFAC; }
+
 /* System message — centered, accented */
 .conv-system {
   margin: 10px 0;
@@ -449,6 +629,130 @@ ul { list-style: none; }
   font-weight: 600;
   text-align: center;
   letter-spacing: 0.2px;
+}
+
+/* User follow-up message — chat bubble with tail */
+.conv-user-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 10px 0 10px 40px;
+}
+
+.conv-user-bubble {
+  position: relative;
+  background: #B8CCE0;
+  color: #1A1A2A;
+  border-radius: 18px 18px 4px 18px;
+  padding: 9px 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.conv-user-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: -7px;
+  width: 0;
+  height: 0;
+  border: 7px solid transparent;
+  border-left-color: #B8CCE0;
+  border-bottom: 0;
+  border-right: 0;
+}
+
+/* Follow-up input area */
+#followup-input-area {
+  flex-shrink: 0;
+  padding: 10px 12px;
+  background: #0A0F1C;
+  border-top: 1px solid #2A344A;
+}
+
+#followup-input-inner {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+#followup-textarea {
+  flex: 1;
+  background: #0B0F1A;
+  border: 1px solid #2A344A;
+  border-radius: 8px;
+  color: #E5E7EB;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 12px;
+  resize: none;
+  min-height: 62px;
+  transition: border-color 0.15s;
+}
+
+#followup-textarea:focus {
+  outline: none;
+  border-color: #3B82F6;
+}
+
+#followup-textarea::placeholder {
+  color: #4B5563;
+}
+
+#followup-textarea:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#followup-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#followup-send-btn {
+  background: #3B82F6;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+#followup-send-btn:hover:not(:disabled) {
+  background: #2563EB;
+}
+
+#followup-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#followup-close-btn {
+  background: #1A2233;
+  color: #F87171;
+  border: 1px solid #2A344A;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+#followup-close-btn:hover {
+  background: #2A1A1A;
+  color: #FCA5A5;
 }
 
 /* Agent tool-use block — Claude favicon + yellow tint */
@@ -1182,6 +1486,508 @@ ul { list-style: none; }
 
 .dialog-btn-secondary:hover:not(:disabled) {
   background: #374357;
+}
+
+/* ---------------------------------------------------------------------------
+   Feature detail dialog
+   --------------------------------------------------------------------------- */
+
+.fd-dialog-box {
+  width: 780px;
+  max-width: 95vw;
+  max-height: 88vh;
+}
+
+.fd-tab-bar {
+  display: flex;
+  background: #0F1623;
+  border-bottom: 1px solid #2A344A;
+  padding: 0 18px;
+  flex-shrink: 0;
+}
+
+.fd-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #9CA3AF;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+
+.fd-tab:hover {
+  color: #FFFFFF;
+}
+
+.fd-tab.active {
+  color: #3B82F6;
+  border-bottom-color: #3B82F6;
+}
+
+.fd-dialog-body {
+  padding: 20px 22px;
+}
+
+.fd-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 28px;
+}
+
+.fd-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fd-detail-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+}
+
+.fd-detail-value {
+  font-size: 13px;
+  color: #E5E7EB;
+  word-break: break-all;
+}
+
+.fd-pre {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #D1D5DB;
+  background: #0B0F1A;
+  border: 1px solid #2A344A;
+  border-radius: 6px;
+  padding: 14px 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.fd-plan-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fd-plan-item {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+  color: #D1D5DB;
+  line-height: 1.55;
+}
+
+.fd-plan-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6B7280;
+  flex-shrink: 0;
+  min-width: 20px;
+  text-align: right;
+  padding-top: 1px;
+}
+
+.fd-file-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fd-file-item {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 11px;
+  color: #9CA3AF;
+  padding: 5px 10px;
+  background: #0B0F1A;
+  border-radius: 4px;
+  border-left: 2px solid #2A344A;
+}
+
+/* Conversation tab */
+.fd-conv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fd-conv-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fd-conv-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fd-conv-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.fd-conv-badge.thinking  { background: #1A1A2E; color: #818CF8; }
+.fd-conv-badge.agent     { background: #0E2033; color: #38BDF8; }
+.fd-conv-badge.command   { background: #0F1A0F; color: #4ADE80; }
+.fd-conv-badge.system    { background: #1A1F0F; color: #A3E635; }
+.fd-conv-badge.git       { background: #1A120A; color: #FB923C; }
+.fd-conv-badge.assistant { background: #1A1225; color: #C084FC; }
+.fd-conv-badge.user      { background: #0F1825; color: #93C5FD; }
+.fd-conv-badge.file      { background: #0A1A0A; color: #34D399; }
+
+/* File op detail inside the conversation timeline (detail modal) */
+.fd-conv-file-path {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 11px;
+  color: #9CA3AF;
+  margin-left: 6px;
+}
+
+.fd-conv-file-snippet {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 5px 10px;
+  border-radius: 4px;
+  margin-top: 2px;
+}
+
+.fd-conv-file-snippet.old { background: #1A0707; color: #FCA5A5; }
+.fd-conv-file-snippet.new { background: #071A0A; color: #86EFAC; }
+.fd-conv-file-snippet.content { background: #071A0A; color: #86EFAC; }
+
+.fd-conv-file-meta {
+  font-size: 10px;
+  color: #6B7280;
+  margin-top: 2px;
+}
+
+.fd-conv-agent-desc {
+  font-size: 10px;
+  color: #6B7280;
+  font-style: italic;
+}
+
+.fd-conv-time {
+  font-size: 10px;
+  color: #4B5563;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.fd-conv-content {
+  font-size: 11px;
+  line-height: 1.55;
+  color: #D1D5DB;
+  padding: 6px 10px;
+  border-radius: 5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.fd-conv-content.thinking  { background: #0D0D1A; color: #A5B4FC; font-style: italic; }
+.fd-conv-content.agent     { background: #070F18; color: #7DD3FC; }
+.fd-conv-content.command   { background: #0B0F1A; color: #86EFAC; font-family: "SF Mono","Cascadia Code","Fira Code","Consolas",monospace; font-size: 10.5px; }
+.fd-conv-content.system    { background: #0B1A0B; color: #BEF264; }
+.fd-conv-content.git       { background: #1A0F07; color: #FCA5A5; font-family: "SF Mono","Cascadia Code","Fira Code","Consolas",monospace; font-size: 10.5px; }
+.fd-conv-content.assistant { background: #100A1A; color: #E9D5FF; }
+.fd-conv-content.user      { background: #07101A; color: #BAE6FD; }
+
+/* Git diff tab */
+.fd-git-stat {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #D1D5DB;
+  background: #0B0F1A;
+  border: 1px solid #2A344A;
+  border-radius: 6px 6px 0 0;
+  padding: 12px 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  border-bottom: none;
+}
+
+.fd-git-diff {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  background: #0B0F1A;
+  border: 1px solid #2A344A;
+  border-radius: 0 0 6px 6px;
+  padding: 0;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.fd-diff-line {
+  display: block;
+  padding: 0 14px;
+  white-space: pre;
+}
+
+.fd-diff-line.add    { background: #071A0F; color: #4ADE80; }
+.fd-diff-line.remove { background: #1A0707; color: #F87171; }
+.fd-diff-line.hunk   { background: #0A1020; color: #60A5FA; }
+.fd-diff-line.file   { background: #12152A; color: #C4B5FD; font-weight: 700; }
+.fd-diff-line.plain  { color: #9CA3AF; }
+
+.fd-git-skip-note {
+  font-size: 11px;
+  color: #6B7280;
+  font-style: italic;
+  padding: 4px 14px 6px;
+  border-left: 2px solid #2A344A;
+  margin-bottom: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   npm commands section in side nav
+   --------------------------------------------------------------------------- */
+
+/* Side nav needs to handle overflow now that it has a scrollable section */
+#side-nav {
+  overflow: hidden;
+}
+
+.npm-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  border-top: 1px solid #1A2233;
+  margin-top: 6px;
+  padding-top: 4px;
+}
+
+.npm-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 20px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  flex-shrink: 0;
+}
+
+.npm-section-key {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #1A2233;
+  border: 1px solid #2A344A;
+  color: #9CA3AF;
+}
+
+/* Highlight the ! key when npm mode is active */
+.npm-mode .npm-section-key {
+  background: #3B82F6;
+  border-color: #3B82F6;
+  color: #fff;
+}
+
+#npm-commands-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-bottom: 4px;
+}
+
+#npm-commands-list::-webkit-scrollbar { width: 4px; }
+#npm-commands-list::-webkit-scrollbar-thumb { background: #2A344A; border-radius: 2px; }
+#npm-commands-list::-webkit-scrollbar-track { background: transparent; }
+
+.npm-cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  margin: 0 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.npm-cmd-item:hover {
+  background: #1A2233;
+}
+
+.npm-cmd-item.active {
+  background: #3B82F622;
+}
+
+.npm-cmd-num {
+  display: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 17px;
+  background: #3B82F6;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+/* Show numbers next to commands when ! mode is active */
+.npm-mode .npm-cmd-num {
+  display: inline-block;
+}
+
+.npm-cmd-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: #D1D5DB;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.npm-cmd-item.active .npm-cmd-name {
+  color: #3B82F6;
+}
+
+.npm-cmd-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.npm-cmd-indicator.running { background: #22C55E; }
+.npm-cmd-indicator.stopped { background: #F59E0B; }
+.npm-cmd-indicator.exited  { background: #6B7280; }
+
+/* ---------------------------------------------------------------------------
+   Command terminal view
+   --------------------------------------------------------------------------- */
+
+#command-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0B0F1A;
+}
+
+#command-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  background: #121826;
+  border-bottom: 1px solid #2A344A;
+  flex-shrink: 0;
+  height: 38px;
+}
+
+.cmd-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #3B82F6;
+  white-space: nowrap;
+}
+
+.npm-run-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.npm-run-idle    { background: #1A2233;  color: #9CA3AF; }
+.npm-run-running { background: #0B1A0F;  color: #22C55E; border: 1px solid #22C55E44; }
+.npm-run-stopped { background: #1A1400;  color: #F59E0B; border: 1px solid #F59E0B44; }
+.npm-run-exited  { background: #1A1826;  color: #9CA3AF; border: 1px solid #2A344A; }
+
+.cmd-toolbar-spacer {
+  flex: 1;
+}
+
+.cmd-action-btn {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 5px;
+  border: 1px solid #2A344A;
+  background: #1A2233;
+  color: #D1D5DB;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.cmd-action-btn:hover:not(:disabled) {
+  background: #2A344A;
+  color: #fff;
+}
+
+.cmd-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+#command-terminal {
+  flex: 1;
+  overflow: auto;
+  background: #000000;
+  padding: 10px 16px;
+}
+
+#command-terminal::-webkit-scrollbar { width: 8px; }
+#command-terminal::-webkit-scrollbar-thumb { background: #2A344A; border-radius: 4px; }
+#command-terminal::-webkit-scrollbar-track { background: transparent; }
+
+#command-output {
+  margin: 0;
+  padding: 0;
+  font-family: "Fira Code", "SF Mono", "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #ccffcc;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 /* Large-screen override: double the dialog size when viewport is wide enough */

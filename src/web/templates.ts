@@ -40,6 +40,10 @@ export function renderMainPage(server: WebServer): string {
 
   <!-- App styles (no external CDN dependencies) -->
   <link rel="stylesheet" href="/static/css/main.css" />
+  <!-- Ace Editor for settings file editing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.min.js"></script>
+  <!-- Session signing key — injected server-side, used for HMAC request signing -->
+  <script>window.__KAIBOT_KEY = "${server.hmacSecret}";</script>
 </head>
 <body>
 
@@ -105,16 +109,37 @@ export function renderMainPage(server: WebServer): string {
             <kbd aria-hidden="true">N</kbd>
           </a>
         </li>
+        <li class="nav-divider" role="separator"></li>
         <li>
-          <a href="#tech-debt" class="nav-item"
-             accesskey="s" title="Tech Debt Scan [S]"
-             id="nav-scan">
-            <span class="nav-icon" aria-hidden="true">&#x1F50D;</span>
-            <span class="nav-label">Tech Debt</span>
-            <kbd aria-hidden="true">S</kbd>
+          <a href="#settings" class="nav-item"
+             title="Settings [*]"
+             id="nav-settings">
+            <span class="nav-icon" aria-hidden="true">&#x2699;&#xFE0F;</span>
+            <span class="nav-label">Settings</span>
+            <kbd aria-hidden="true">*</kbd>
+          </a>
+        </li>
+        <li>
+          <a href="#code-review" class="nav-item"
+             title="Code Review [^]"
+             id="nav-codereview">
+            <span class="nav-icon" aria-hidden="true">&#x1F4DD;</span>
+            <span class="nav-label">Code Review</span>
+            <kbd aria-hidden="true">^</kbd>
           </a>
         </li>
       </ul>
+
+      <!-- npm commands section (populated by client.js) -->
+      <div class="npm-section" id="npm-section">
+        <div class="npm-section-header">
+          <span class="npm-section-title">npm commands</span>
+          <kbd class="npm-section-key">!</kbd>
+        </div>
+        <ul id="npm-commands-list">
+          <!-- populated dynamically -->
+        </ul>
+      </div>
 
       <div class="nav-footer">
         <span class="nav-version">v0.1.0</span>
@@ -132,6 +157,17 @@ export function renderMainPage(server: WebServer): string {
           </div>
           <div class="panel-content" id="conversation-content"
                role="region" aria-label="Agent conversation feed"></div>
+          <!-- Follow-up input: shown after feature completes, while agent awaits prompts -->
+          <div id="followup-input-area" style="display:none" aria-label="Follow-up prompt">
+            <div id="followup-input-inner">
+              <textarea id="followup-textarea" rows="3"
+                placeholder="Send a follow-up message to the agent… (Ctrl+Enter to send)"></textarea>
+              <div id="followup-buttons">
+                <button id="followup-send-btn" title="Send (Ctrl+Enter)">Send</button>
+                <button id="followup-close-btn" title="Close agent and return to watching">Close Agent</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -192,6 +228,39 @@ export function renderMainPage(server: WebServer): string {
       </div>
     </main>
 
+    <!-- ── Command terminal view (hidden by default, shown when npm script selected) -->
+    <main id="command-view" style="display:none" role="main" aria-label="Command terminal">
+      <div id="command-toolbar">
+        <span id="command-title" class="cmd-title">—</span>
+        <span id="command-status-badge" class="npm-run-badge npm-run-idle">idle</span>
+        <div class="cmd-toolbar-spacer"></div>
+        <button id="cmd-stop-btn" class="cmd-action-btn">&#x23F9; Stop</button>
+        <button id="cmd-restart-btn" class="cmd-action-btn">&#x21BA; Restart</button>
+      </div>
+      <div id="command-terminal">
+        <pre id="command-output"></pre>
+      </div>
+    </main>
+
+    <!-- ── Settings view (hidden by default, shown when Settings selected) -->
+    <main id="settings-view" style="display:none" role="main" aria-label="Settings">
+      <div id="settings-container">
+        <div id="settings-tab-bar">
+          <button class="settings-tab active" data-file="CLAUDE.md">CLAUDE.md</button>
+          <button class="settings-tab" data-file="README.md">README.md</button>
+          <button class="settings-tab" data-file=".kaibot/PROMPT.md">.kaibot/PROMPT.md</button>
+          <button class="settings-tab" data-file="system_prompt.md">system_prompt.md</button>
+        </div>
+        <div id="settings-editor-area">
+          <div id="settings-editor-toolbar">
+            <span id="settings-file-label"></span>
+            <button id="settings-save-btn" class="settings-save-btn">&#x1F4BE; Save</button>
+          </div>
+          <div id="settings-editor"></div>
+        </div>
+      </div>
+    </main>
+
   </div>
 
   <!-- ── Bottom status bar ──────────────────────────────────────────── -->
@@ -230,6 +299,28 @@ export function renderMainPage(server: WebServer): string {
       <div class="dialog-footer">
         <button class="dialog-btn dialog-btn-secondary" id="nf-hold">Hold</button>
         <button class="dialog-btn dialog-btn-primary" id="nf-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Feature Detail Dialog ──────────────────────────────────────── -->
+  <div id="feature-detail-overlay" class="dialog-overlay" style="display:none"
+       role="dialog" aria-modal="true" aria-labelledby="fd-dialog-title">
+    <div class="dialog-box fd-dialog-box">
+      <div class="dialog-header">
+        <h2 id="fd-dialog-title">Feature Detail</h2>
+        <button class="dialog-close" id="fd-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="fd-tab-bar">
+        <button class="fd-tab active" data-tab="details">Details</button>
+        <button class="fd-tab" data-tab="request">Original Request</button>
+        <button class="fd-tab" data-tab="plan">Plan</button>
+        <button class="fd-tab" data-tab="files">File Changes</button>
+        <button class="fd-tab" data-tab="conversation">Conversation</button>
+        <button class="fd-tab" data-tab="git">Git</button>
+      </div>
+      <div class="dialog-body fd-dialog-body" id="fd-body">
+        <div class="empty-state">Loading&#x2026;</div>
       </div>
     </div>
   </div>
