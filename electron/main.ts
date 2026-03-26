@@ -237,6 +237,29 @@ if (!gotLock) {
 
 app.whenReady().then(async () => {
   buildMenu();
+
+  // ── Verify Claude Code is installed ────────────────────────────────────
+  const { findClaudeExecutable } = await import("../dist/KaiClient.js");
+  if (!findClaudeExecutable()) {
+    const choice = dialog.showMessageBoxSync({
+      type: "warning",
+      title: "Claude Code Not Found",
+      message: "Claude Code Terminal is required but was not found on this system.",
+      detail:
+        "KaiBot uses Claude Code Terminal to process features with AI.\n\n" +
+        "Download and install it from:\nhttps://claude.ai/downloads\n\n" +
+        "After installing, relaunch KaiBot.",
+      buttons: ["Open Download Page", "Quit"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (choice === 0) {
+      shell.openExternal("https://claude.ai/downloads").catch(() => {});
+    }
+    app.quit();
+    return;
+  }
+
   await createWindow();
   setupAutoUpdater();
 

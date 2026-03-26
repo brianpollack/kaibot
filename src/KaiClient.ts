@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { homedir } from "os";
 import { join, resolve } from "path";
 
 import {
@@ -79,6 +80,38 @@ export function buildSystemPrompt(projectDir: string): string {
   const claudeMd = loadClaudeMd(projectDir);
   if (!claudeMd) return BASE_SYSTEM_PROMPT;
   return `${BASE_SYSTEM_PROMPT}\n\nCodebase and user instructions are shown below. Be sure to adhere to these instructions. IMPORTANT: These instructions OVERRIDE any default behavior and you MUST follow them exactly as written.\n\n${claudeMd}`;
+}
+
+// ---------------------------------------------------------------------------
+// Claude executable resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the path to the native `claude` binary if it can be found at one
+ * of the standard install locations, or `undefined` to let the SDK fall back
+ * to `node cli.js`.
+ *
+ * In a packaged Electron app `node` is not on the spawned-process PATH, so we
+ * need the self-contained native binary instead.
+ */
+export function findClaudeExecutable(): string | undefined {
+  const home = homedir();
+  const candidates =
+    process.platform === "win32"
+      ? [
+          join(home, "AppData", "Local", "Programs", "claude", "claude.exe"),
+          join(home, ".claude", "local", "claude.exe"),
+          "C:\\Program Files\\Claude\\claude.exe",
+        ]
+      : [
+          join(home, ".local", "bin", "claude"),
+          join(home, ".claude", "local", "claude"),
+          "/usr/local/bin/claude",
+          "/opt/homebrew/bin/claude",
+          "/usr/bin/claude",
+        ];
+
+  return candidates.find((p) => existsSync(p));
 }
 
 // ---------------------------------------------------------------------------
@@ -222,6 +255,9 @@ export class KaiClient {
       },
       maxTurns: 1000,
       persistSession: true,
+      // In a packaged Electron app, `node` is not on the spawned-process PATH.
+      // Pointing to the native claude binary avoids the node-in-PATH requirement.
+      pathToClaudeCodeExecutable: findClaudeExecutable(),
     };
   }
 }
