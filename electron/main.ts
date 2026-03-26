@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, shell, dialog } from "electron";
-import { autoUpdater } from "electron-updater";
+import pkg from "electron-updater";
+const { autoUpdater } = pkg;
 import { join } from "path";
 import { fileURLToPath } from "url";
 
