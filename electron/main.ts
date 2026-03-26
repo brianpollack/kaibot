@@ -211,6 +211,27 @@ function setupAutoUpdater(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Single-instance lock — second launch focuses the existing window instead
+// of trying to bind port 8500 again.
+// ---------------------------------------------------------------------------
+
+const gotLock = app.requestSingleInstanceLock();
+
+if (!gotLock) {
+  // Another instance is already running — signal it to come to front, then exit.
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    // Called on the *first* instance when a second one tries to launch.
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 
