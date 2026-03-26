@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, shell, dialog } from "electron";
+import { autoUpdater } from "electron-updater";
 import { join } from "path";
 import { fileURLToPath } from "url";
 
@@ -171,12 +172,51 @@ async function createWindow(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-updater
+// ---------------------------------------------------------------------------
+
+function setupAutoUpdater(): void {
+  // Only run in the packaged app — skip during development
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("update-downloaded", () => {
+    const choice = dialog.showMessageBoxSync({
+      type: "info",
+      title: "Update Ready",
+      message: "A new version of KaiBot has been downloaded.",
+      detail: "Restart now to apply the update, or it will be installed automatically when you quit.",
+      buttons: ["Restart Now", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (choice === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+
+  autoUpdater.on("error", (err) => {
+    console.error("Auto-updater error:", err.message ?? err);
+  });
+
+  // Check shortly after launch so the window is visible first
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((err: Error) => {
+      console.error("Update check failed:", err.message);
+    });
+  }, 3000);
+}
+
+// ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(async () => {
   buildMenu();
   await createWindow();
+  setupAutoUpdater();
 
   // macOS: re-create window when dock icon is clicked and no windows are open
   app.on("activate", async () => {
