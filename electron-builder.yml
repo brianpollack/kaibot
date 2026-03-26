@@ -4,6 +4,12 @@ productName: KaiBot
 # No asar — ESM dynamic imports and native path resolution work best without it
 asar: false
 
+# GitHub Releases — used by dist:mac and dist:win (--publish always)
+publish:
+  provider: github
+  owner: brianpollack
+  repo: kaibot
+
 directories:
   output: release
 
@@ -28,8 +34,7 @@ mac:
         - x64
         - arm64
   icon: electron/icons/icon.icns
-  entitlements: null
-  hardenedRuntime: false
+  hardenedRuntime: true
   gatekeeperAssess: false
 
 dmg:

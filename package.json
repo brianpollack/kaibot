@@ -22,6 +22,8 @@
     "electron:pack": "npm run build:all && electron-builder",
     "electron:pack:mac": "npm run build:all && electron-builder --mac",
     "electron:pack:win": "npm run build:all && electron-builder --win",
+    "dist:mac": "npm run build:all && electron-builder --mac --publish always",
+    "dist:win": "npm run build:all && electron-builder --win --publish always",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "typecheck": "tsc --noEmit",
