@@ -1,3 +1,4 @@
+import { execSync } from "child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join, resolve } from "path";
@@ -11,6 +12,57 @@ import {
 
 import { bashSecurityHook } from "./security.js";
 import type { ProviderName } from "./models.js";
+
+// ---------------------------------------------------------------------------
+// Shell environment resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Captures the user's full shell environment once at module load by spawning
+ * a login shell that also sources the interactive RC file.
+ *
+ * Why this is needed:
+ *   macOS .app bundles launched from Finder/Dock receive only the minimal
+ *   launchd environment — no Homebrew, no nvm, no pyenv, etc. A login shell
+ *   (-l) sources /etc/zprofile and ~/.zprofile. Explicitly sourcing ~/.zshrc
+ *   (or ~/.bashrc) on top of that picks up nvm, volta, and anything else the
+ *   user configured for interactive sessions.
+ *
+ * The result is merged over process.env so Electron-specific vars are kept
+ * but PATH and tool-specific vars come from the real user environment.
+ */
+const SHELL_ENV: NodeJS.ProcessEnv = (() => {
+  if (process.platform === "win32") return { ...process.env };
+
+  const shell = process.env.SHELL ?? "/bin/zsh";
+  const shellName = shell.split("/").pop() ?? "";
+
+  // Source the interactive RC file on top of the login environment so that
+  // nvm, volta, and similar per-session tools are included.
+  const sourceRc =
+    shellName === "zsh"
+      ? '[ -f ~/.zshrc ] && . ~/.zshrc 2>/dev/null;'
+      : shellName === "bash"
+        ? '[ -f ~/.bashrc ] && . ~/.bashrc 2>/dev/null;'
+        : "";
+
+  try {
+    const raw = execSync(`${shell} -l -c '${sourceRc} env'`, {
+      encoding: "utf8",
+      timeout: 8000,
+    });
+
+    const shellEnv: NodeJS.ProcessEnv = {};
+    for (const line of raw.split("\n")) {
+      const eq = line.indexOf("=");
+      if (eq > 0) shellEnv[line.slice(0, eq)] = line.slice(eq + 1);
+    }
+    // Prefer the shell's values (PATH etc.) but keep Electron-injected vars.
+    return { ...process.env, ...shellEnv };
+  } catch {
+    return { ...process.env };
+  }
+})();
 
 // ---------------------------------------------------------------------------
 // Tool lists
@@ -258,6 +310,9 @@ export class KaiClient {
       // In a packaged Electron app, `node` is not on the spawned-process PATH.
       // Pointing to the native claude binary avoids the node-in-PATH requirement.
       pathToClaudeCodeExecutable: findClaudeExecutable(),
+      // Use the full login-shell environment so npm, git, nvm-managed node,
+      // etc. resolve correctly when launched from a GUI context.
+      env: SHELL_ENV,
     };
   }
 }
