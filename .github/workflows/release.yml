@@ -66,19 +66,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Restore Windows cert
-        # Only write the cert file when the secret is present
-        if: ${{ secrets.WIN_CERT_BASE64 != '' }}
+      - name: Build and publish win
         shell: pwsh
         env:
-          WIN_CERT_BASE64: ${{ secrets.WIN_CERT_BASE64 }}
-        run: |
-          [IO.File]::WriteAllBytes("win-cert.p12", [Convert]::FromBase64String($env:WIN_CERT_BASE64))
-
-      - name: Build and publish win
-        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Point to the decoded cert only when it was written above
-          CSC_LINK: ${{ secrets.WIN_CERT_BASE64 != '' && 'win-cert.p12' || '' }}
-          CSC_KEY_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
-        run: npm run dist:win
+          WIN_CERT_BASE64: ${{ secrets.WIN_CERT_BASE64 }}
+          WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+        run: |
+          # Decode and wire up the cert only when the secret is present
+          if ($env:WIN_CERT_BASE64) {
+            [IO.File]::WriteAllBytes("win-cert.p12", [Convert]::FromBase64String($env:WIN_CERT_BASE64))
+            $env:CSC_LINK = (Get-Location).Path + "\win-cert.p12"
+            $env:CSC_KEY_PASSWORD = $env:WIN_CERT_PASSWORD
+          }
+          npm run dist:win
