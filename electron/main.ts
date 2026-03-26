@@ -1,0 +1,194 @@
+import { app, BrowserWindow, Menu, shell, dialog } from "electron";
+import { join } from "path";
+import { fileURLToPath } from "url";
+
+// ---------------------------------------------------------------------------
+// Path helpers
+// ---------------------------------------------------------------------------
+
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
+
+// In dev:       dist-electron/main.js  → __dirname = <root>/dist-electron/
+// In packaged:  resources/app/dist-electron/main.js → same relative structure
+// Either way, "../dist" resolves to the compiled KaiBot source.
+
+// ---------------------------------------------------------------------------
+// Lazy imports from compiled KaiBot source
+// These are loaded after app is ready so Electron is fully initialized first.
+// ---------------------------------------------------------------------------
+
+let mainWindow: BrowserWindow | null = null;
+const PORT = 8500;
+
+// ---------------------------------------------------------------------------
+// App setup
+// ---------------------------------------------------------------------------
+
+function buildMenu(): void {
+  const isMac = process.platform === "darwin";
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: "about" as const },
+              { type: "separator" as const },
+              { role: "services" as const },
+              { type: "separator" as const },
+              { role: "hide" as const },
+              { role: "hideOthers" as const },
+              { role: "unhide" as const },
+              { type: "separator" as const },
+              { role: "quit" as const },
+            ],
+          },
+        ]
+      : []),
+    {
+      label: "File",
+      submenu: [isMac ? { role: "close" as const } : { role: "quit" as const }],
+    },
+    { role: "editMenu" as const },
+    {
+      role: "viewMenu" as const,
+      submenu: [
+        { role: "reload" as const },
+        { role: "forceReload" as const },
+        { type: "separator" as const },
+        { role: "resetZoom" as const },
+        { role: "zoomIn" as const },
+        { role: "zoomOut" as const },
+        { type: "separator" as const },
+        { role: "togglefullscreen" as const },
+      ],
+    },
+    { role: "windowMenu" as const },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+async function createWindow(): Promise<void> {
+  // ── Start the KaiBot web server ─────────────────────────────────────
+  // Import from the compiled KaiBot dist. The relative path works both
+  // in dev (dist-electron/ → ../dist/) and in the packaged app
+  // (resources/app/dist-electron/ → ../dist/).
+  const { WebServer } = await import("../dist/web/WebServer.js");
+  const { uiStore } = await import("../dist/ui/store.js");
+  const { loadSettings, saveSettings } = await import("../dist/settings.js");
+  const { addToPathHistory } = await import("../dist/pathHistory.js");
+  const { KaiBot } = await import("../dist/KaiBot.js");
+  const { getOpenRouterModel } = await import("../dist/models.js");
+
+  const webServer = new WebServer({
+    port: PORT,
+    host: "127.0.0.1",
+    model: process.env.KAI_MODEL ?? "claude-opus-4-6",
+  });
+
+  try {
+    await webServer.start();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    dialog.showErrorBox(
+      "KaiBot — Startup Error",
+      `Could not start the web server on port ${PORT}.\n\n${msg}\n\nIs another instance already running?`,
+    );
+    app.quit();
+    return;
+  }
+
+  // ── Wire project activation (same logic as kai_bot.ts "waiting" mode) ──
+  webServer.on("project-activated", (resolvedDir: string) => {
+    addToPathHistory(resolvedDir);
+
+    const savedSettings = loadSettings(resolvedDir);
+    const provider: string = (savedSettings.provider as string) ?? "anthropic";
+    const model =
+      provider === "openrouter"
+        ? getOpenRouterModel()
+        : process.env.KAI_MODEL ?? savedSettings.model ?? "claude-opus-4-6";
+
+    webServer.model = model;
+
+    uiStore.on("model-changed", (newModel: string) => {
+      webServer.model = newModel;
+      saveSettings(resolvedDir, { ...loadSettings(resolvedDir), model: newModel });
+    });
+
+    uiStore.on("provider-changed", (newProvider: string) => {
+      saveSettings(resolvedDir, { ...loadSettings(resolvedDir), provider: newProvider });
+    });
+
+    const bot = new KaiBot(resolvedDir, model, false, provider as "anthropic" | "openrouter");
+    bot.start().catch((botErr: unknown) => {
+      const msg = botErr instanceof Error ? botErr.message : String(botErr);
+      console.error("KaiBot error:", msg);
+    });
+  });
+
+  // ── Graceful shutdown ──────────────────────────────────────────────────
+  app.on("before-quit", () => {
+    webServer.stop().catch(() => {});
+  });
+
+  // ── Create the browser window ─────────────────────────────────────────
+  mainWindow = new BrowserWindow({
+    width: 1400,
+    height: 900,
+    minWidth: 900,
+    minHeight: 600,
+    title: "Protovate KaiBot",
+    backgroundColor: "#0B0F1A",
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      // No preload needed — we load a localhost URL, not local files
+    },
+  });
+
+  // Open external links in the system browser, not in the Electron window
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url).catch(() => {});
+    return { action: "deny" };
+  });
+
+  // Intercept navigation away from localhost (e.g. clicking external links)
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith(`http://127.0.0.1:${PORT}`)) {
+      event.preventDefault();
+      shell.openExternal(url).catch(() => {});
+    }
+  });
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+
+  await mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
+}
+
+// ---------------------------------------------------------------------------
+// App lifecycle
+// ---------------------------------------------------------------------------
+
+app.whenReady().then(async () => {
+  buildMenu();
+  await createWindow();
+
+  // macOS: re-create window when dock icon is clicked and no windows are open
+  app.on("activate", async () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      await createWindow();
+    }
+  });
+});
+
+// Quit when all windows are closed (except on macOS)
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});

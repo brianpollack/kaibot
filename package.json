@@ -1,18 +1,27 @@
 {
   "name": "kaibot",
   "version": "0.1.0",
+  "description": "Protovate KaiBot is an AI Agent Wrapper that helps process project changes through an AI LLM with change tracking",
+  "author": "Brian Pollack - Protovate",
   "type": "module",
+  "main": "dist-electron/main.js",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "build": "tsc",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:all": "npm run build && npm run build:electron",
     "dev": "tsx src/index.ts",
     "bot": "tsx src/kai_bot.ts",
     "local": "tsx src/kai_bot.ts .",
     "feature": "tsx src/kai_bot.ts feature",
     "models": "tsx src/kai_bot.ts models",
     "start": "node dist/index.js",
+    "electron": "npm run build:all && electron .",
+    "electron:pack": "npm run build:all && electron-builder",
+    "electron:pack:mac": "npm run build:all && electron-builder --mac",
+    "electron:pack:win": "npm run build:all && electron-builder --win",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "typecheck": "tsc --noEmit",
@@ -23,7 +32,7 @@
     "testOpenrouter": "tsx src/kai_bot.ts testOpenrouter"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.72",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.84",
     "@linear/sdk": "^57.0.0",
     "ink": "^6.8.0",
     "react": "^19.2.4",
@@ -34,6 +43,8 @@
     "@types/node": "^25.4.0",
     "@types/react": "^19.2.14",
     "@types/ws": "^8.18.1",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
     "eslint": "^9",
     "prettier": "^3",
     "tsx": "^4",

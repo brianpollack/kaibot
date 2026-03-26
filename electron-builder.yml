@@ -1,0 +1,63 @@
+appId: com.protovate.kaibot
+productName: KaiBot
+
+# No asar — ESM dynamic imports and native path resolution work best without it
+asar: false
+
+directories:
+  output: release
+
+# Files to include in the packaged app
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - web/**/*
+  - prompts/**/*
+  - package.json
+  - node_modules/**/*
+
+# Exclude dev-only and build artifacts from node_modules
+extraFiles: []
+
+# macOS
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  icon: electron/icons/icon.icns
+  entitlements: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+
+dmg:
+  title: KaiBot ${version}
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# Windows
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+  icon: electron/icons/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+# Linux (optional)
+linux:
+  target: AppImage
+  category: Development

@@ -1,11 +1,15 @@
 import { existsSync } from "fs";
-import { resolve } from "path";
+import { homedir } from "os";
+import { createInterface } from "readline";
+import { join, resolve } from "path";
+import { spawn } from "child_process";
 
 import { loadProjectEnv } from "./env.js";
 import { KaiBot } from "./KaiBot.js";
 import { createFeature } from "./feature_creator.js";
 import { getOpenRouterModel, printModels, type ProviderName } from "./models.js";
 import { loadSettings, saveSettings } from "./settings.js";
+import { addToPathHistory } from "./pathHistory.js";
 import { mountUI, unmountUI } from "./ui/render.js";
 import { uiStore } from "./ui/store.js";
 import { WebServer } from "./web/WebServer.js";
@@ -80,100 +84,239 @@ if (subcommand === "feature") {
 }
 
 // ---------------------------------------------------------------------------
-// Args
+// CLI flags
 // ---------------------------------------------------------------------------
 
-const useLinear = process.argv.includes("--linear");
-const projectDir = process.argv.slice(2).find((arg) => !arg.startsWith("--"));
-
-if (!projectDir) {
-  console.error("Usage: tsx src/kai_bot.ts <project-directory> [--linear]");
-  console.error("       tsx src/kai_bot.ts feature <feature name words...>");
-  console.error("       tsx src/kai_bot.ts models");
-  console.error("  Example: tsx src/kai_bot.ts /path/to/my-project");
-  console.error("  Example: tsx src/kai_bot.ts /path/to/my-project --linear");
-  console.error("  Example: tsx src/kai_bot.ts feature Add user authentication");
-  console.error("\nSubcommands:");
-  console.error("  models    List available Claude models");
-  console.error("  feature   Create a new feature file interactively");
-  console.error("\nFlags:");
-  console.error("  --linear  Enable Linear mode (requires LINEAR_API_KEY and LINEAR_TEAM_KEY)");
-  console.error("\nEnvironment variables:");
-  console.error("  ANTHROPIC_API_KEY  (required)");
-  console.error("  KAI_MODEL          (optional, default: claude-opus-4-6)");
-  console.error("  LINEAR_API_KEY     (required for --linear mode)");
-  console.error("  LINEAR_TEAM_KEY    (required for --linear mode)");
-  process.exit(1);
-}
-
-const resolvedDir = resolve(projectDir);
-
-if (!existsSync(resolvedDir)) {
-  console.error(`Project directory does not exist: ${resolvedDir}`);
-  process.exit(1);
-}
-
-loadProjectEnv(resolvedDir);
-
-if (!process.env.ANTHROPIC_API_KEY) {
-  console.error("Error: ANTHROPIC_API_KEY environment variable is not set.");
-  console.error("Get your API key from: https://console.anthropic.com/");
-  process.exit(1);
-}
-
-const savedSettings = loadSettings(resolvedDir);
-const provider: ProviderName = (savedSettings.provider as ProviderName) ?? "anthropic";
-const model =
-  provider === "openrouter"
-    ? getOpenRouterModel()
-    : process.env.KAI_MODEL ?? savedSettings.model ?? "claude-opus-4-6";
+const allArgs = process.argv.slice(2);
+const useLinear = allArgs.includes("--linear");
+const useInk = allArgs.includes("--ink");
+const useDaemon = allArgs.includes("--daemon");
+const projectDir = allArgs.find((arg) => !arg.startsWith("--"));
 
 // ---------------------------------------------------------------------------
-// Start
+// Helpers
 // ---------------------------------------------------------------------------
 
-const bot = new KaiBot(resolvedDir, model, useLinear, provider);
+/**
+ * Expand a leading `~` or `~/` to the user's home directory.
+ * Node's `path.resolve` does not handle tilde expansion.
+ */
+function expandTilde(p: string): string {
+  if (p === "~") return homedir();
+  if (p.startsWith("~/") || p.startsWith("~\\")) {
+    return join(homedir(), p.slice(2));
+  }
+  return p;
+}
 
-// Mount the Ink UI
-mountUI();
-
-// Start the web UI server
 const webPort = process.env.KAI_WEB_PORT ? parseInt(process.env.KAI_WEB_PORT, 10) : 8500;
 const webHost = process.env.KAI_WEB_HOST ?? "127.0.0.1";
-const webServer = new WebServer({
-  port: webPort,
-  host: webHost,
-  projectDir: resolvedDir,
-  model,
-});
 
-webServer.start().then(() => {
+/**
+ * Start the bot and wire up all events for a given project directory.
+ * Called either immediately (when projectDir is provided) or after
+ * project selection (when started in waiting mode).
+ */
+function startBotWithProject(
+  resolvedDir: string,
+  model: string,
+  provider: ProviderName,
+  webServer: WebServer,
+  ink: boolean,
+): KaiBot {
+  const bot = new KaiBot(resolvedDir, model, useLinear, provider);
+
+  if (ink) {
+    mountUI();
+  }
+
+  // Keep webServer model in sync with UI model changes; persist to settings file
+  uiStore.on("model-changed", (newModel: string) => {
+    webServer.model = newModel;
+    saveSettings(resolvedDir, { ...loadSettings(resolvedDir), model: newModel });
+  });
+
+  // Keep provider in sync with UI provider changes; persist to settings file
+  uiStore.on("provider-changed", (newProvider: string) => {
+    saveSettings(resolvedDir, { ...loadSettings(resolvedDir), provider: newProvider });
+  });
+
+  const shutdown = () => {
+    if (ink) unmountUI();
+    bot.stop();
+    webServer.stop().finally(() => process.exit(0));
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+  uiStore.on("quit", shutdown);
+
   uiStore.setStatusMessage(`Web UI: ${webServer.url}  |  Watching for features…`);
-}).catch((err) => {
-  const msg = err instanceof Error ? err.message : String(err);
-  uiStore.setStatusMessage(`Web UI failed to start: ${msg}`);
-});
 
-// Keep webServer model in sync with UI model changes; persist to settings file
-uiStore.on("model-changed", (newModel: string) => {
-  webServer.model = newModel;
-  saveSettings(resolvedDir, { ...loadSettings(resolvedDir), model: newModel });
-});
+  // Start bot (fire-and-forget — it awaits internally)
+  bot.start().catch((err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Bot error: ${msg}`);
+  });
 
-// Keep provider in sync with UI provider changes; persist to settings file
-uiStore.on("provider-changed", (newProvider: string) => {
-  saveSettings(resolvedDir, { ...loadSettings(resolvedDir), provider: newProvider });
-});
+  return bot;
+}
 
-const shutdown = () => {
-  unmountUI();
-  bot.stop();
-  webServer.stop().finally(() => process.exit(0));
-};
+// ---------------------------------------------------------------------------
+// Daemon mode — fork and exit parent
+// ---------------------------------------------------------------------------
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+if (useDaemon) {
+  if (!projectDir) {
+    console.error("Error: Daemon mode requires a project directory.");
+    console.error("Usage: tsx src/kai_bot.ts <project-directory> --daemon");
+    process.exit(1);
+  }
 
-uiStore.on("quit", shutdown);
+  const childArgs = allArgs.filter((a) => a !== "--daemon");
+  const child = spawn(process.execPath, [process.argv[1], ...childArgs], {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+  console.error(`KaiBot daemon started (PID ${child.pid}). Web UI: http://${webHost}:${webPort}`);
+  process.exit(0);
+}
 
-await bot.start();
+// ---------------------------------------------------------------------------
+// Project dir provided — start immediately
+// ---------------------------------------------------------------------------
+
+if (projectDir) {
+  const resolvedDir = resolve(expandTilde(projectDir));
+
+  if (!existsSync(resolvedDir)) {
+    console.error(`Project directory does not exist: ${resolvedDir}`);
+    process.exit(1);
+  }
+
+  loadProjectEnv(resolvedDir);
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.error("Error: ANTHROPIC_API_KEY environment variable is not set.");
+    console.error("Get your API key from: https://console.anthropic.com/");
+    process.exit(1);
+  }
+
+  const savedSettings = loadSettings(resolvedDir);
+  const provider: ProviderName = (savedSettings.provider as ProviderName) ?? "anthropic";
+  const model =
+    provider === "openrouter"
+      ? getOpenRouterModel()
+      : process.env.KAI_MODEL ?? savedSettings.model ?? "claude-opus-4-6";
+
+  addToPathHistory(resolvedDir);
+
+  const webServer = new WebServer({
+    port: webPort,
+    host: webHost,
+    projectDir: resolvedDir,
+    model,
+  });
+
+  await webServer.start();
+
+  if (!useInk) {
+    console.error(`KaiBot Web UI: ${webServer.url}`);
+  }
+
+  startBotWithProject(resolvedDir, model, provider, webServer, useInk);
+}
+
+// ---------------------------------------------------------------------------
+// No project dir — Ink mode: prompt in terminal
+// ---------------------------------------------------------------------------
+
+else if (useInk) {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+
+  const askPath = (): Promise<string> =>
+    new Promise((resolve) => {
+      rl.question("Enter project directory path: ", (answer) => resolve(answer.trim()));
+    });
+
+  let resolvedDir = "";
+  while (true) {
+    const input = await askPath();
+    if (!input) {
+      console.error("Path is required.");
+      continue;
+    }
+    resolvedDir = resolve(expandTilde(input));
+    if (!existsSync(resolvedDir)) {
+      console.error(`Directory does not exist: ${resolvedDir}`);
+      continue;
+    }
+    loadProjectEnv(resolvedDir);
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error("Error: ANTHROPIC_API_KEY not set. Add it to the project's .env or export it.");
+      continue;
+    }
+    break;
+  }
+  rl.close();
+
+  addToPathHistory(resolvedDir);
+
+  const savedSettings = loadSettings(resolvedDir);
+  const provider: ProviderName = (savedSettings.provider as ProviderName) ?? "anthropic";
+  const model =
+    provider === "openrouter"
+      ? getOpenRouterModel()
+      : process.env.KAI_MODEL ?? savedSettings.model ?? "claude-opus-4-6";
+
+  const webServer = new WebServer({
+    port: webPort,
+    host: webHost,
+    projectDir: resolvedDir,
+    model,
+  });
+
+  await webServer.start();
+  startBotWithProject(resolvedDir, model, provider, webServer, true);
+}
+
+// ---------------------------------------------------------------------------
+// No project dir — WebUI mode (default): start server in waiting state
+// ---------------------------------------------------------------------------
+
+else {
+  const defaultModel = process.env.KAI_MODEL ?? "claude-opus-4-6";
+
+  const webServer = new WebServer({
+    port: webPort,
+    host: webHost,
+    model: defaultModel,
+  });
+
+  await webServer.start();
+  console.error(`KaiBot waiting for project selection at ${webServer.url}`);
+
+  // When a project is selected via the web UI, start the bot
+  webServer.on("project-activated", (resolvedDir: string) => {
+    addToPathHistory(resolvedDir);
+
+    const savedSettings = loadSettings(resolvedDir);
+    const provider: ProviderName = (savedSettings.provider as ProviderName) ?? "anthropic";
+    const model =
+      provider === "openrouter"
+        ? getOpenRouterModel()
+        : process.env.KAI_MODEL ?? savedSettings.model ?? "claude-opus-4-6";
+
+    webServer.model = model;
+
+    startBotWithProject(resolvedDir, model, provider, webServer, false);
+  });
+
+  // Graceful shutdown while waiting
+  const shutdown = () => {
+    webServer.stop().finally(() => process.exit(0));
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}

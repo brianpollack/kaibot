@@ -1,11 +1,12 @@
 import { execFileSync } from "child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
 import { type IncomingMessage, type ServerResponse } from "http";
+import { homedir } from "os";
 import { extname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
 import { verifyRequestHmac } from "./hmac.js";
-import { renderMainPage } from "./templates.js";
+import { renderMainPage, renderProjectSelectionPage } from "./templates.js";
 import { getWebState } from "./wsHandler.js";
 import type { WebServer } from "./WebServer.js";
 import {
@@ -16,6 +17,10 @@ import {
 } from "../models.js";
 import { uiStore } from "../ui/store.js";
 import { generateFeatureId } from "../feature.js";
+import { loadPathHistory, addToPathHistory } from "../pathHistory.js";
+import { loadProjectEnv } from "../env.js";
+import { loadCodeAssistOptions, loadPromptContent, runCodeAssist } from "../codeAssist.js";
+import { todoExists, loadTodoItems, runTodoPlan } from "../todoAssist.js";
 
 // ---------------------------------------------------------------------------
 // MIME types
@@ -85,6 +90,30 @@ function checkHmac(
   return true;
 }
 
+/**
+ * Expand a leading `~` or `~/` to the user's home directory.
+ * Node's `path.resolve` does not handle tilde expansion.
+ */
+function expandTilde(p: string): string {
+  if (p === "~") return homedir();
+  if (p.startsWith("~/") || p.startsWith("~\\")) {
+    return join(homedir(), p.slice(2));
+  }
+  return p;
+}
+
+/**
+ * Guard helper: returns false and sends a 503 when no project is selected.
+ */
+function requireProject(server: WebServer, res: ServerResponse): boolean {
+  if (server.state === "waiting" || !server.projectDir) {
+    res.writeHead(503, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+    res.end(JSON.stringify({ error: "No project selected" }));
+    return false;
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
@@ -107,6 +136,167 @@ export function handleRequest(
       ...NO_CACHE_HEADERS,
     });
     res.end("User-agent: *\nDisallow: /\n");
+    return;
+  }
+
+  // ── Static files: /static/* and /vendor/* — always available ───────
+  if (pathname.startsWith("/static/") || pathname.startsWith("/vendor/")) {
+    serveStatic(pathname, res);
+    return;
+  }
+
+  // ── Path history API — available even in waiting state ─────────────
+  if (pathname === "/api/path-history" && req.method === "GET") {
+    const paths = loadPathHistory();
+    const result = paths.map((p) => ({
+      path: p,
+      exists: existsSync(p) && statSync(p).isDirectory(),
+    }));
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+    res.end(JSON.stringify({ paths: result }));
+    return;
+  }
+
+  // ── Select project API — transitions server from waiting to active ─
+  if (pathname === "/api/select-project" && req.method === "POST") {
+    if (server.state === "active") {
+      res.writeHead(409, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Project already selected" }));
+      return;
+    }
+    readBody(req)
+      .then((body) => {
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const rawPath = String(data["path"] ?? "").trim();
+        if (!rawPath) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: "Path is required" }));
+          return;
+        }
+        const resolvedDir = resolve(expandTilde(rawPath));
+        if (!existsSync(resolvedDir)) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: `Directory does not exist: ${resolvedDir}` }));
+          return;
+        }
+        if (!statSync(resolvedDir).isDirectory()) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: `Path is not a directory: ${resolvedDir}` }));
+          return;
+        }
+
+        // Load project-specific .env
+        loadProjectEnv(resolvedDir);
+
+        if (!process.env.ANTHROPIC_API_KEY) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({
+            error: "ANTHROPIC_API_KEY not set. Add it to the project's .env file or export it in your shell.",
+            needsApiKey: true,
+            projectDir: resolvedDir,
+          }));
+          return;
+        }
+
+        addToPathHistory(resolvedDir);
+        server.activateProject(resolvedDir);
+
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ ok: true, projectDir: resolvedDir }));
+      })
+      .catch(() => {
+        res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error: "Invalid request body" }));
+      });
+    return;
+  }
+
+  // ── Save API key — validates with Anthropic, writes to project .env ──
+  if (pathname === "/api/save-api-key" && req.method === "POST") {
+    readBody(req)
+      .then(async (body) => {
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const apiKey = String(data["apiKey"] ?? "").trim();
+        const projectDir = String(data["projectDir"] ?? "").trim();
+
+        if (!apiKey) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: "API key is required" }));
+          return;
+        }
+        if (!projectDir || !existsSync(projectDir)) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: "Invalid project directory" }));
+          return;
+        }
+
+        // Validate key by calling the Anthropic models endpoint
+        try {
+          const resp = await fetch("https://api.anthropic.com/v1/models", {
+            headers: {
+              "x-api-key": apiKey,
+              "anthropic-version": "2023-06-01",
+            },
+          });
+          if (!resp.ok) {
+            const text = await resp.text().catch(() => "");
+            res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+            res.end(JSON.stringify({ error: `Invalid API key (${resp.status}): ${text.slice(0, 200)}` }));
+            return;
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: `Failed to validate key: ${msg}` }));
+          return;
+        }
+
+        // Append to (or create) the project's .env file
+        const envPath = join(projectDir, ".env");
+        let envContent = "";
+        if (existsSync(envPath)) {
+          envContent = readFileSync(envPath, "utf-8");
+          // Replace existing key if present
+          if (/^ANTHROPIC_API_KEY=.*/m.test(envContent)) {
+            envContent = envContent.replace(/^ANTHROPIC_API_KEY=.*/m, `ANTHROPIC_API_KEY=${apiKey}`);
+          } else {
+            envContent = envContent.trimEnd() + `\nANTHROPIC_API_KEY=${apiKey}\n`;
+          }
+        } else {
+          envContent = `ANTHROPIC_API_KEY=${apiKey}\n`;
+        }
+        writeFileSync(envPath, envContent, "utf-8");
+
+        // Also set in process.env so the next select-project call succeeds
+        process.env.ANTHROPIC_API_KEY = apiKey;
+
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ ok: true }));
+      })
+      .catch(() => {
+        res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error: "Invalid request body" }));
+      });
+    return;
+  }
+
+  // ── When in waiting state: serve project selection page ─────────────
+  if (server.state === "waiting") {
+    if (pathname === "/" || pathname === "/login" || pathname === "/main") {
+      const html = renderProjectSelectionPage(server);
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", ...NO_CACHE_HEADERS });
+      res.end(html);
+      return;
+    }
+    // All other API routes unavailable while waiting
+    if (pathname.startsWith("/api/")) {
+      res.writeHead(503, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "No project selected" }));
+      return;
+    }
+    // Fallthrough to 404
+    res.writeHead(404, { "Content-Type": "text/plain", ...NO_CACHE_HEADERS });
+    res.end("Not Found");
     return;
   }
 
@@ -171,11 +361,155 @@ export function handleRequest(
     return;
   }
 
+  // ── API: code assist options ─────────────────────────────────────────
+  if (pathname === "/api/code-assist/options" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+    res.end(JSON.stringify(loadCodeAssistOptions()));
+    return;
+  }
+
+  // ── API: code assist prompt preview ────────────────────────────────
+  if (pathname === "/api/code-assist/prompt" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    const file = url.searchParams.get("file") ?? "";
+    if (!file) {
+      res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "file parameter required" }));
+      return;
+    }
+    try {
+      const content = loadPromptContent(file);
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ content }));
+    } catch {
+      res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Prompt file not found" }));
+    }
+    return;
+  }
+
+  // ── API: run code assist ──────────────────────────────────────────
+  if (pathname === "/api/code-assist/run" && req.method === "POST") {
+    readBody(req)
+      .then((body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        if (!requireProject(server, res)) return;
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const name = String(data["name"] ?? "").trim();
+        if (!name) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: "name is required" }));
+          return;
+        }
+        const options = loadCodeAssistOptions();
+        const option = options.find((o) => o.name === name);
+        if (!option) {
+          res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: `Option not found: ${name}` }));
+          return;
+        }
+        const model = uiStore.getState().model || "claude-opus-4-6";
+        // Fire and forget — streaming happens via WebSocket state broadcast
+        runCodeAssist(option, server.projectDir!, model).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          uiStore.setStatusMessage(`Code assist error: ${msg}`);
+        });
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ ok: true }));
+      })
+      .catch(() => {
+        res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error: "Invalid request body" }));
+      });
+    return;
+  }
+
+  // ── API: code assist result file reader ─────────────────────────────
+  if (pathname === "/api/code-assist/result-file" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
+    const filePath = url.searchParams.get("path") ?? "";
+    if (!filePath) {
+      res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "path parameter required" }));
+      return;
+    }
+    // Security: ensure the path is within the project directory
+    const resolvedPath = resolve(filePath);
+    if (!resolvedPath.startsWith(server.projectDir!)) {
+      res.writeHead(403, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Path outside project directory" }));
+      return;
+    }
+    try {
+      const content = existsSync(resolvedPath) ? readFileSync(resolvedPath, "utf-8") : "";
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ content }));
+    } catch {
+      res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Failed to read file" }));
+    }
+    return;
+  }
+
+  // ── API: TODO exists check ─────────────────────────────────────────
+  if (pathname === "/api/todo/exists" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+    res.end(JSON.stringify({ exists: todoExists(server.projectDir!) }));
+    return;
+  }
+
+  // ── API: TODO items list ───────────────────────────────────────────
+  if (pathname === "/api/todo/items" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+    res.end(JSON.stringify(loadTodoItems(server.projectDir!)));
+    return;
+  }
+
+  // ── API: run TODO plan via Claude agent ───────────────────────────
+  if (pathname === "/api/todo/plan" && req.method === "POST") {
+    readBody(req)
+      .then(async (body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        if (!requireProject(server, res)) return;
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const id = Number(data["id"]);
+        const items = loadTodoItems(server.projectDir!);
+        const item = items.find((i) => i.id === id);
+        if (!item) {
+          res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: `TODO item not found: ${id}` }));
+          return;
+        }
+        const model = uiStore.getState().model || "claude-opus-4-6";
+        const plan = await runTodoPlan(item, server.projectDir!, model);
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ plan, title: item.title }));
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        uiStore.setStatusMessage(`TODO plan error: ${msg}`);
+        try {
+          res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: msg }));
+        } catch {
+          // Response may already be sent if the agent threw mid-stream
+        }
+      });
+    return;
+  }
+
   // ── API: features list (pending + complete) ────────────────────────
   if (pathname === "/api/features" && req.method === "GET") {
     if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
     res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
-    res.end(JSON.stringify(getFeaturesList(server.projectDir)));
+    res.end(JSON.stringify(getFeaturesList(server.projectDir!)));
     return;
   }
 
@@ -183,8 +517,9 @@ export function handleRequest(
   const featureDetailMatch = /^\/api\/features\/([a-zA-Z0-9_-]+)$/.exec(pathname);
   if (featureDetailMatch && req.method === "GET") {
     if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
     const id = featureDetailMatch[1];
-    const logDir = join(server.projectDir, "features", "log");
+    const logDir = join(server.projectDir!, "features", "log");
     const filePath = join(logDir, `${id}.json`);
     if (!existsSync(filePath)) {
       res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
@@ -206,8 +541,9 @@ export function handleRequest(
   const featureGitMatch = /^\/api\/features\/([a-zA-Z0-9_-]+)\/git$/.exec(pathname);
   if (featureGitMatch && req.method === "GET") {
     if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
     const id = featureGitMatch[1];
-    const logDir = join(server.projectDir, "features", "log");
+    const logDir = join(server.projectDir!, "features", "log");
     const filePath = join(logDir, `${id}.json`);
     if (!existsSync(filePath)) {
       res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
@@ -222,7 +558,7 @@ export function handleRequest(
         res.end(JSON.stringify({ error: "No commit hash recorded for this feature" }));
         return;
       }
-      const gitDir = server.projectDir;
+      const gitDir = server.projectDir!;
       const runGit = (...args: string[]) => {
         try {
           return execFileSync("git", args, { cwd: gitDir, encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
@@ -246,6 +582,7 @@ export function handleRequest(
     readBody(req)
       .then((body) => {
         if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        if (!requireProject(server, res)) return;
         const data = JSON.parse(body) as Record<string, unknown>;
         const title = String(data["title"] ?? "").trim();
         const description = String(data["description"] ?? "").trim();
@@ -258,7 +595,7 @@ export function handleRequest(
         }
 
         const featureId = generateFeatureId();
-        const featuresDir = join(server.projectDir, "features");
+        const featuresDir = join(server.projectDir!, "features");
         const targetDir = hold ? join(featuresDir, "hold") : featuresDir;
         mkdirSync(targetDir, { recursive: true });
 
@@ -279,8 +616,9 @@ export function handleRequest(
   // ── API: settings file read ───────────────────────────────────────
   if (pathname === "/api/settings/file" && req.method === "GET") {
     if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
     const fileKey = url.searchParams.get("path") ?? "";
-    const resolvedPath = resolveSettingsFilePath(fileKey, server.projectDir);
+    const resolvedPath = resolveSettingsFilePath(fileKey, server.projectDir!);
     if (!resolvedPath) {
       res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
       res.end(JSON.stringify({ error: "Invalid file path" }));
@@ -302,10 +640,11 @@ export function handleRequest(
     readBody(req)
       .then((body) => {
         if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        if (!requireProject(server, res)) return;
         const data = JSON.parse(body) as Record<string, unknown>;
         const fileKey = String(data["path"] ?? "").trim();
         const content = String(data["content"] ?? "");
-        const resolvedPath = resolveSettingsFilePath(fileKey, server.projectDir);
+        const resolvedPath = resolveSettingsFilePath(fileKey, server.projectDir!);
         if (!resolvedPath) {
           res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
           res.end(JSON.stringify({ error: "Invalid file path" }));
@@ -331,8 +670,9 @@ export function handleRequest(
   // ── API: npm scripts list ─────────────────────────────────────────
   if (pathname === "/api/npm-scripts" && req.method === "GET") {
     if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
     res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
-    res.end(JSON.stringify(server.npmRunner.getScripts()));
+    res.end(JSON.stringify(server.npmRunner!.getScripts()));
     return;
   }
 
@@ -340,32 +680,27 @@ export function handleRequest(
   const npmMatch = pathname.match(/^\/api\/npm-scripts\/([^/]+)\/(start|stop|restart|output)$/);
   if (npmMatch) {
     if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
     const name = decodeURIComponent(npmMatch[1]);
     const action = npmMatch[2];
 
     if (action === "output" && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
       res.end(JSON.stringify({
-        output: server.npmRunner.getOutput(name),
-        info: server.npmRunner.getInfo(name),
+        output: server.npmRunner!.getOutput(name),
+        info: server.npmRunner!.getInfo(name),
       }));
       return;
     }
 
     if (req.method === "POST") {
-      if (action === "start")   server.npmRunner.start(name);
-      if (action === "stop")    server.npmRunner.stop(name);
-      if (action === "restart") server.npmRunner.restart(name);
+      if (action === "start")   server.npmRunner!.start(name);
+      if (action === "stop")    server.npmRunner!.stop(name);
+      if (action === "restart") server.npmRunner!.restart(name);
       res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
       res.end(JSON.stringify({ ok: true }));
       return;
     }
-  }
-
-  // ── Static files: /static/* and /vendor/* ──────────────────────────
-  if (pathname.startsWith("/static/") || pathname.startsWith("/vendor/")) {
-    serveStatic(pathname, res);
-    return;
   }
 
   // ── 404 ────────────────────────────────────────────────────────────

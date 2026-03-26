@@ -124,6 +124,40 @@ function escHtml(str) {
 }
 
 // ---------------------------------------------------------------------------
+// Thinking content renderer — parses ```lang code fences into highlighted blocks
+// ---------------------------------------------------------------------------
+
+function renderThinkingLines(text) {
+  var html = "";
+  var lines = text.split("\n");
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (line.trim()) {
+      html += '<div class="conv-thinking-line">' + escHtml(line) + "</div>";
+    } else {
+      html += '<div class="conv-thinking-gap"></div>';
+    }
+  }
+  return html;
+}
+
+function renderThinkingContent(text) {
+  var html = "";
+  var fenceRe = /```(\w*)\n([\s\S]*?)```/g;
+  var lastIndex = 0;
+  var match;
+  while ((match = fenceRe.exec(text)) !== null) {
+    html += renderThinkingLines(text.slice(lastIndex, match.index));
+    var lang = match[1] || "";
+    var langClass = lang ? ' class="language-' + escHtml(lang) + '"' : "";
+    html += "<pre><code" + langClass + ">" + escHtml(match[2]) + "</code></pre>";
+    lastIndex = match.index + match[0].length;
+  }
+  html += renderThinkingLines(text.slice(lastIndex));
+  return html;
+}
+
+// ---------------------------------------------------------------------------
 // Conversation feed renderer
 // ---------------------------------------------------------------------------
 
@@ -137,19 +171,7 @@ function renderConversationContent() {
     switch (item.type) {
 
       case "thinking": {
-        // Render each line; blank lines become small spacers
-        var lines = item.content.split("\n");
-        var html = '<div class="conv-thinking">';
-        for (var i = 0; i < lines.length; i++) {
-          var line = lines[i];
-          if (line.trim()) {
-            html += '<div class="conv-thinking-line">' + escHtml(line) + "</div>";
-          } else {
-            html += '<div class="conv-thinking-gap"></div>';
-          }
-        }
-        html += "</div>";
-        return html;
+        return '<div class="conv-thinking">' + renderThinkingContent(item.content) + "</div>";
       }
 
       case "command": {
@@ -416,6 +438,7 @@ function updateDOM() {
   updatePanelContent($fileopsContent,      renderFileOpsContent);
   updatePanelContent($statusContent,       renderFeatureStatusContent);
   updatePanelContent($planContent,         renderPlanContent);
+  if (typeof hljs !== "undefined") { hljs.highlightAll(); }
 
   // Show/hide follow-up input based on whether the agent is awaiting prompts
   var followupArea = document.getElementById("followup-input-area");
@@ -426,6 +449,57 @@ function updateDOM() {
   var followupSendBtn = document.getElementById("followup-send-btn");
   if (followupTextarea) followupTextarea.disabled = !state.followupFeatureId;
   if (followupSendBtn) followupSendBtn.disabled = !state.followupFeatureId;
+
+  // Code assist result bar
+  var existingBar = document.getElementById("ca-result-bar");
+  if (state.codeAssistResult && !state.codeAssistActive) {
+    if (!existingBar) {
+      var bar = document.createElement("div");
+      bar.id = "ca-result-bar";
+      bar.className = "ca-result-bar";
+      bar.innerHTML =
+        '<button class="ca-result-btn" id="ca-result-open">' + escHtml(state.codeAssistResult.action) + '</button>' +
+        '<span class="ca-result-cost">' + escHtml(state.statusMessage || "") + '</span>';
+      var convPanel = document.getElementById("panel-conversation");
+      if (convPanel) convPanel.appendChild(bar);
+
+      document.getElementById("ca-result-open").addEventListener("click", function () {
+        var path = state.codeAssistResult ? state.codeAssistResult.path : "";
+        if (path) {
+          signedFetch("/api/code-assist/result-file?path=" + encodeURIComponent(path))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data.content != null) openCodeAssistResultViewer(state.codeAssistResult.action, data.content);
+            })
+            .catch(function () {});
+        }
+      });
+    }
+  } else if (existingBar) {
+    existingBar.remove();
+  }
+}
+
+function openCodeAssistResultViewer(title, content) {
+  var overlay = document.createElement("div");
+  overlay.className = "ca-overlay ca-preview-overlay";
+  overlay.innerHTML =
+    '<div class="ca-card ca-preview-card">' +
+      '<div class="ca-header">' +
+        '<h2>' + escHtml(title) + '</h2>' +
+        '<button class="dialog-close ca-close" aria-label="Close">&times;</button>' +
+      '</div>' +
+      '<div class="ca-body ca-preview-body">' +
+        '<div class="conv-thinking">' + renderThinkingContent(content) + '</div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector(".ca-close").addEventListener("click", function () { overlay.remove(); });
+  overlay.addEventListener("click", function (e) { if (e.target === overlay) overlay.remove(); });
+  function handleKey(e) {
+    if (e.key === "Escape") { overlay.remove(); document.removeEventListener("keydown", handleKey); }
+  }
+  document.addEventListener("keydown", handleKey);
 }
 
 // ---------------------------------------------------------------------------
@@ -517,6 +591,8 @@ function connectWebSocket() {
         updateDOM();
       } else if (msg.type === "npm-output" || msg.type === "npm-status" || msg.type === "npm-clear") {
         handleNpmMessage(msg);
+      } else if (msg.type === "npm-scripts-updated") {
+        loadNpmScripts();
       }
     } catch (e) {
       // Ignore malformed messages
@@ -825,30 +901,318 @@ function openProviderSelector() {
 }
 
 // ---------------------------------------------------------------------------
-// Code Review submenu
+// Code Assist menu
 // ---------------------------------------------------------------------------
 
-function openCodeReviewMenu() {
-  if (activePopup) return;
-  var trigger = document.getElementById("nav-codereview");
-  showPopupMenu({
-    items: [
-      { id: "code-review", label: "1. Code Review", description: "Review recent code changes", key: "1" },
-    ],
-    anchorEl: trigger,
-    onSelect: function (item) {
-      if (item.id === "code-review") {
-        startCodeReview();
+var _codeAssistOverlay = null;
+
+function openCodeAssistMenu() {
+  if (_codeAssistOverlay) return;
+
+  // Create overlay
+  var overlay = document.createElement("div");
+  overlay.className = "ca-overlay";
+  overlay.innerHTML =
+    '<div class="ca-card">' +
+      '<div class="ca-header">' +
+        '<h2>Code Assist</h2>' +
+        '<button class="dialog-close ca-close" aria-label="Close">&times;</button>' +
+      '</div>' +
+      '<div class="ca-body"><div class="empty-state">Loading…</div></div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  _codeAssistOverlay = overlay;
+
+  overlay.querySelector(".ca-close").addEventListener("click", closeCodeAssistMenu);
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) closeCodeAssistMenu();
+  });
+
+  // Fetch options
+  signedFetch("/api/code-assist/options")
+    .then(function (r) { return r.json(); })
+    .then(function (options) {
+      var body = overlay.querySelector(".ca-body");
+      if (!options || options.length === 0) {
+        body.innerHTML = '<div class="empty-state">No code assist options configured</div>';
+        return;
       }
-    },
-    onClose: function () {},
+      var html = '';
+      options.forEach(function (opt, i) {
+        html +=
+          '<div class="ca-option" data-index="' + i + '">' +
+            '<div class="ca-option-info">' +
+              '<div class="ca-option-name">' + escHtml(opt.name) + '</div>' +
+              '<div class="ca-option-author">by ' + escHtml(opt.author) + '</div>' +
+              '<div class="ca-option-desc">' + escHtml(opt.description) + '</div>' +
+            '</div>' +
+            '<div class="ca-option-actions">' +
+              '<button class="ca-btn ca-btn-preview" data-prompt="' + escHtml(opt.prompt) + '">Preview</button>' +
+              '<button class="ca-btn ca-btn-run" data-name="' + escHtml(opt.name) + '">Run</button>' +
+            '</div>' +
+          '</div>';
+      });
+      body.innerHTML = html;
+
+      // Wire up buttons
+      body.querySelectorAll(".ca-btn-preview").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          openCodeAssistPreview(btn.getAttribute("data-prompt"));
+        });
+      });
+      body.querySelectorAll(".ca-btn-run").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var name = btn.getAttribute("data-name");
+          closeCodeAssistMenu();
+          runCodeAssistFromWeb(name);
+        });
+      });
+    })
+    .catch(function () {
+      var body = overlay.querySelector(".ca-body");
+      body.innerHTML = '<div class="empty-state">Failed to load options</div>';
+    });
+
+  // Escape to close
+  function handleKey(e) {
+    if (e.key === "Escape") {
+      closeCodeAssistMenu();
+      document.removeEventListener("keydown", handleKey);
+    }
+  }
+  document.addEventListener("keydown", handleKey);
+}
+
+function closeCodeAssistMenu() {
+  if (_codeAssistOverlay) {
+    _codeAssistOverlay.remove();
+    _codeAssistOverlay = null;
+  }
+}
+
+function openCodeAssistPreview(promptFile) {
+  var overlay = document.createElement("div");
+  overlay.className = "ca-overlay ca-preview-overlay";
+  overlay.innerHTML =
+    '<div class="ca-card ca-preview-card">' +
+      '<div class="ca-header">' +
+        '<h2>Prompt Preview</h2>' +
+        '<button class="dialog-close ca-close" aria-label="Close">&times;</button>' +
+      '</div>' +
+      '<div class="ca-body ca-preview-body"><div class="empty-state">Loading…</div></div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+
+  overlay.querySelector(".ca-close").addEventListener("click", function () { overlay.remove(); });
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  signedFetch("/api/code-assist/prompt?file=" + encodeURIComponent(promptFile))
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var body = overlay.querySelector(".ca-preview-body");
+      body.innerHTML = '<div class="conv-thinking">' + renderThinkingContent(data.content || "") + '</div>';
+    })
+    .catch(function () {
+      overlay.querySelector(".ca-preview-body").innerHTML = '<div class="empty-state">Failed to load prompt</div>';
+    });
+
+  function handleKey(e) {
+    if (e.key === "Escape") {
+      overlay.remove();
+      document.removeEventListener("keydown", handleKey);
+    }
+  }
+  document.addEventListener("keydown", handleKey);
+}
+
+function runCodeAssistFromWeb(name) {
+  // Switch to dashboard to show conversation
+  showDashboardView();
+
+  signedFetch("/api/code-assist/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name }),
+  }).catch(function () {
+    // Error will show via WebSocket state updates
   });
 }
 
-function startCodeReview() {
-  // TODO: implement code review feature
-  var navCodereview = document.getElementById("nav-codereview");
-  if (navCodereview) navCodereview.classList.add("active");
+// ---------------------------------------------------------------------------
+// TODO List menu
+// ---------------------------------------------------------------------------
+
+var _todoOverlay = null;
+
+function openTodoMenu() {
+  if (_todoOverlay) return;
+
+  var overlay = document.createElement("div");
+  overlay.className = "ca-overlay";
+  overlay.innerHTML =
+    '<div class="ca-card">' +
+      '<div class="ca-header">' +
+        '<h2>&#x2714;&#xFE0F; TODO List</h2>' +
+        '<button class="dialog-close ca-close" aria-label="Close">&times;</button>' +
+      '</div>' +
+      '<div class="ca-body"><div class="empty-state">Loading\u2026</div></div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  _todoOverlay = overlay;
+
+  overlay.querySelector(".ca-close").addEventListener("click", closeTodoMenu);
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) closeTodoMenu();
+  });
+
+  signedFetch("/api/todo/items")
+    .then(function (r) { return r.json(); })
+    .then(function (items) {
+      var body = overlay.querySelector(".ca-body");
+      if (!items || items.length === 0) {
+        body.innerHTML = '<div class="empty-state">No TODO items found</div>';
+        return;
+      }
+      var html = '';
+      items.forEach(function (item) {
+        var priorityClass = 'todo-priority-' + (item.priority || 'low');
+        var fileRef = item.file
+          ? '<div class="ca-option-author">' + escHtml(item.file) +
+            (item.line != null ? ':' + item.line : '') + '</div>'
+          : '';
+        html +=
+          '<div class="ca-option">' +
+            '<div class="ca-option-info">' +
+              '<div class="ca-option-name">' +
+                '<span class="todo-priority-badge ' + escHtml(priorityClass) + '">' + escHtml(item.priority) + '</span>' +
+                '<span class="todo-category">' + escHtml(item.category) + '</span> ' +
+                escHtml(item.title) +
+              '</div>' +
+              fileRef +
+              '<div class="ca-option-desc">' + escHtml(item.description) + '</div>' +
+            '</div>' +
+            '<div class="ca-option-actions">' +
+              '<button class="ca-btn ca-btn-preview" data-id="' + item.id + '">Preview</button>' +
+              '<button class="ca-btn ca-btn-run" data-id="' + item.id + '">Run</button>' +
+            '</div>' +
+          '</div>';
+      });
+      body.innerHTML = html;
+
+      body.querySelectorAll(".ca-btn-preview").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = parseInt(btn.getAttribute("data-id"), 10);
+          var item = items.find(function (i) { return i.id === id; });
+          if (item) openTodoItemPreview(item);
+        });
+      });
+      body.querySelectorAll(".ca-btn-run").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = parseInt(btn.getAttribute("data-id"), 10);
+          var item = items.find(function (i) { return i.id === id; });
+          if (item) {
+            closeTodoMenu();
+            runTodoPlanFromWeb(item);
+          }
+        });
+      });
+    })
+    .catch(function () {
+      var body = overlay.querySelector(".ca-body");
+      body.innerHTML = '<div class="empty-state">Failed to load TODO items</div>';
+    });
+
+  function handleKey(e) {
+    if (e.key === "Escape") {
+      closeTodoMenu();
+      document.removeEventListener("keydown", handleKey);
+    }
+  }
+  document.addEventListener("keydown", handleKey);
+}
+
+function closeTodoMenu() {
+  if (_todoOverlay) {
+    _todoOverlay.remove();
+    _todoOverlay = null;
+  }
+}
+
+function openTodoItemPreview(item) {
+  var overlay = document.createElement("div");
+  overlay.className = "ca-overlay ca-preview-overlay";
+  var fileInfo = item.file
+    ? '<div class="todo-preview-field"><span class="todo-preview-label">File:</span> ' + escHtml(item.file) +
+      (item.line != null ? ' &nbsp;<span class="todo-preview-label">Line:</span> ' + item.line : '') +
+      (item.lines ? ' &nbsp;<span class="todo-preview-label">Lines:</span> ' + item.lines.join(', ') : '') +
+      '</div>'
+    : '';
+  overlay.innerHTML =
+    '<div class="ca-card ca-preview-card">' +
+      '<div class="ca-header">' +
+        '<h2>TODO Item</h2>' +
+        '<button class="dialog-close ca-close" aria-label="Close">&times;</button>' +
+      '</div>' +
+      '<div class="ca-body ca-preview-body">' +
+        '<div class="todo-preview">' +
+          '<div class="todo-preview-title">' +
+            '<span class="todo-priority-badge todo-priority-' + escHtml(item.priority) + '">' + escHtml(item.priority) + '</span>' +
+            '<span class="todo-category">' + escHtml(item.category) + '</span> ' +
+            escHtml(item.title) +
+          '</div>' +
+          fileInfo +
+          '<div class="todo-preview-desc">' + escHtml(item.description) + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+
+  overlay.querySelector(".ca-close").addEventListener("click", function () { overlay.remove(); });
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  function handleKey(e) {
+    if (e.key === "Escape") { overlay.remove(); document.removeEventListener("keydown", handleKey); }
+  }
+  document.addEventListener("keydown", handleKey);
+}
+
+function runTodoPlanFromWeb(item) {
+  showDashboardView();
+
+  signedFetch("/api/todo/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: item.id }),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.error) return; // visible via status bar WS update
+      openNewFeatureWithPlan("Resolve TODO: " + item.title, data.plan || "");
+    })
+    .catch(function () {});
+}
+
+function openNewFeatureWithPlan(title, description) {
+  openNewFeatureDialog();
+  setTimeout(function () {
+    var titleInput = document.getElementById("nf-title");
+    if (titleInput) titleInput.value = title;
+    if (nfAceEditor) nfAceEditor.setValue(description, -1);
+  }, 100);
+}
+
+function loadTodoNavItem() {
+  signedFetch("/api/todo/exists")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var navItem = document.getElementById("nav-todo-item");
+      if (navItem) navItem.style.display = data.exists ? "" : "none";
+    })
+    .catch(function () {});
 }
 
 // ---------------------------------------------------------------------------
@@ -902,6 +1266,7 @@ function showFeaturesView() {
 // Settings view
 // ---------------------------------------------------------------------------
 
+var nfAceEditor = null;
 var settingsAceEditor = null;
 var settingsCurrentFile = null;
 var settingsDirtyFiles = {};
@@ -920,6 +1285,20 @@ function showSettingsView() {
   if (!settingsCurrentFile) {
     selectSettingsTab("CLAUDE.md");
   }
+}
+
+function initNFEditor() {
+  if (nfAceEditor) return;
+  if (typeof ace === "undefined") return;
+  nfAceEditor = ace.edit("nf-description-editor");
+  nfAceEditor.setTheme("ace/theme/monokai");
+  nfAceEditor.session.setMode("ace/mode/markdown");
+  nfAceEditor.setOptions({
+    fontSize: "13px",
+    showLineNumbers: true,
+    showPrintMargin: false,
+    wrap: true,
+  });
 }
 
 function initSettingsEditor() {
@@ -1128,6 +1507,7 @@ function renderFeatureDetailContent(tab) {
     body.innerHTML = renderFdFiles(d);
   } else if (tab === "conversation") {
     body.innerHTML = renderFdConversation(d);
+    if (typeof hljs !== "undefined") { hljs.highlightAll(); }
   } else if (tab === "git") {
     body.innerHTML = '<div class="empty-state">Loading git info\u2026</div>';
     signedFetch("/api/features/" + encodeURIComponent(d.id) + "/git")
@@ -1235,6 +1615,16 @@ function renderFdConversation(d) {
 
   var html = items.map(function (item) {
     var type = item.type || "assistant";
+
+    // User follow-up messages — render as white chat bubble (same as live panel)
+    if (type === "user") {
+      return '<div class="fd-conv-item">' +
+        '<div class="conv-user-row">' +
+          '<div class="conv-user-bubble">' + escHtml(String(item.content || "")) + '</div>' +
+        '</div>' +
+      '</div>';
+    }
+
     var label = type;
     if (type === "agent" && item.agentDescription) {
       label = "agent";
@@ -1279,6 +1669,8 @@ function renderFdConversation(d) {
         content += '<div style="padding:6px 10px;color:#6B7280;font-size:11px">(no preview)</div>';
       }
       content += '</div>';
+    } else if (type === "thinking") {
+      content = '<div class="fd-conv-content thinking">' + renderThinkingContent(String(item.content || "")) + '</div>';
     } else {
       content = '<div class="fd-conv-content ' + escHtml(type) + '">' + escHtml(String(item.content || "")) + '</div>';
     }
@@ -1420,13 +1812,14 @@ function openNewFeatureDialog() {
   newFeatureDialogOpen = true;
   overlay.style.display = "";
 
+  initNFEditor();
+
   var titleInput = document.getElementById("nf-title");
-  var descInput = document.getElementById("nf-description");
   var errorEl = document.getElementById("nf-error");
 
   // Reset fields
   if (titleInput) titleInput.value = "";
-  if (descInput) descInput.value = "";
+  if (nfAceEditor) nfAceEditor.setValue("", -1);
   if (errorEl) { errorEl.style.display = "none"; errorEl.textContent = ""; }
 
   // Focus the title input
@@ -1441,13 +1834,12 @@ function closeNewFeatureDialog() {
 
 function submitNewFeature(hold) {
   var titleInput = document.getElementById("nf-title");
-  var descInput = document.getElementById("nf-description");
   var errorEl = document.getElementById("nf-error");
   var saveBtn = document.getElementById("nf-save");
   var holdBtn = document.getElementById("nf-hold");
 
   var title = titleInput ? titleInput.value.trim() : "";
-  var description = descInput ? descInput.value.trim() : "";
+  var description = nfAceEditor ? nfAceEditor.getValue().trim() : "";
 
   if (!title) {
     if (errorEl) {
@@ -1872,7 +2264,7 @@ document.addEventListener("keydown", function (e) {
       break;
     case "^":
       e.preventDefault();
-      openCodeReviewMenu();
+      openCodeAssistMenu();
       break;
     default:
       switch (e.key.toLowerCase()) {
@@ -1939,11 +2331,18 @@ document.addEventListener("click", function (e) {
     showSettingsView();
   }
 
-  // Code Review nav item
+  // Code Assist nav item
   var navCodereview = document.getElementById("nav-codereview");
   if (navCodereview && navCodereview.contains(e.target)) {
     e.preventDefault();
-    openCodeReviewMenu();
+    openCodeAssistMenu();
+  }
+
+  // TODO List nav item
+  var navTodo = document.getElementById("nav-todo");
+  if (navTodo && navTodo.contains(e.target)) {
+    e.preventDefault();
+    openTodoMenu();
   }
 
   // Settings tab clicks
@@ -1983,15 +2382,6 @@ document.addEventListener("click", function (e) {
     submitNewFeature(true);
   }
 
-  // Markdown toolbar buttons
-  var mdBtn = e.target.closest ? e.target.closest(".md-btn") : null;
-  if (mdBtn) {
-    var action = mdBtn.getAttribute("data-md");
-    var textarea = document.getElementById("nf-description");
-    if (action && textarea) {
-      applyMarkdownAction(textarea, action);
-    }
-  }
 
   // npm command items in the side nav
   var npmItem = e.target.closest ? e.target.closest(".npm-cmd-item") : null;
@@ -2073,4 +2463,5 @@ signedFetch("/api/state")
     connectWebSocket();
     startRuntimeTimer();
     loadNpmScripts();
+    loadTodoNavItem();
   });

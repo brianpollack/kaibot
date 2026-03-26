@@ -1355,7 +1355,7 @@ ul { list-style: none; }
 }
 
 .dialog-label + .dialog-label,
-.dialog-textarea + .dialog-label {
+.dialog-label + #nf-description-editor + .dialog-label {
   margin-top: 14px;
 }
 
@@ -1378,60 +1378,16 @@ ul { list-style: none; }
   border-color: #3B82F6;
 }
 
-.dialog-input::placeholder,
-.dialog-textarea::placeholder {
+.dialog-input::placeholder {
   color: #4B5563;
 }
 
-/* Markdown toolbar */
-.md-toolbar {
-  display: flex;
-  gap: 2px;
-  padding: 4px 6px;
-  background: #0B0F1A;
-  border: 1px solid #2A344A;
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
-}
-
-.md-btn {
-  background: none;
-  border: none;
-  color: #9CA3AF;
-  font-family: inherit;
-  font-size: 12px;
-  padding: 3px 7px;
-  border-radius: 3px;
-  cursor: pointer;
-  transition: color 0.1s, background 0.1s;
-  line-height: 1.3;
-}
-
-.md-btn:hover {
-  color: #FFFFFF;
-  background: #1A2233;
-}
-
-.dialog-textarea {
-  display: block;
+#nf-description-editor {
   width: 100%;
-  padding: 10px 12px;
-  font-family: "SF Mono", "Cascadia Code", "Fira Code", "Consolas", monospace;
-  font-size: 12px;
-  line-height: 1.55;
-  color: #FFFFFF;
-  background: #0B0F1A;
+  height: 300px;
   border: 1px solid #2A344A;
-  border-top: 1px solid #1A2233;
-  border-radius: 0 0 6px 6px;
-  outline: none;
-  resize: vertical;
-  min-height: 180px;
-  transition: border-color 0.15s;
-}
-
-.dialog-textarea:focus {
-  border-color: #3B82F6;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .dialog-error {
@@ -1996,7 +1952,231 @@ ul { list-style: none; }
     width: 1120px;
   }
 
-  .dialog-textarea {
-    min-height: 360px;
+  #nf-description-editor {
+    height: 420px;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Code Assist — overlay menu, preview, result bar
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ca-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ca-card {
+  background: #121826;
+  border: 1px solid #1E293B;
+  border-radius: 12px;
+  width: 560px;
+  max-width: 92vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.ca-preview-card {
+  width: 80vw;
+  max-height: 85vh;
+}
+
+.ca-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #1E293B;
+}
+
+.ca-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+.ca-body {
+  padding: 12px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.ca-preview-body {
+  padding: 16px 20px;
+}
+
+.ca-preview-body .conv-thinking {
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* ---------------------------------------------------------------------------
+   TODO List menu
+   --------------------------------------------------------------------------- */
+
+.todo-priority-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-right: 6px;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+.todo-priority-high   { background: rgba(239, 68,  68,  0.2); color: #f87171; border: 1px solid rgba(239, 68,  68,  0.4); }
+.todo-priority-medium { background: rgba(234, 179, 8,   0.2); color: #facc15; border: 1px solid rgba(234, 179, 8,   0.4); }
+.todo-priority-low    { background: rgba(99,  102, 241, 0.2); color: #a5b4fc; border: 1px solid rgba(99,  102, 241, 0.4); }
+
+.todo-category {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.todo-preview {
+  padding: 4px 0;
+}
+
+.todo-preview-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-bottom: 12px;
+}
+
+.todo-preview-field {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+  font-family: 'SF Mono', 'Cascadia Code', monospace;
+}
+
+.todo-preview-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.todo-preview-desc {
+  font-size: 13px;
+  color: #cbd5e1;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  margin-top: 12px;
+}
+
+.ca-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.ca-option:hover {
+  background: #1E293B;
+}
+
+.ca-option-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ca-option-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+.ca-option-author {
+  font-size: 11px;
+  color: #6B7280;
+  margin-top: 2px;
+}
+
+.ca-option-desc {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin-top: 4px;
+}
+
+.ca-option-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 16px;
+  flex-shrink: 0;
+}
+
+.ca-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ca-btn-preview {
+  background: transparent;
+  border: 1px solid #334155;
+  color: #9CA3AF;
+}
+
+.ca-btn-preview:hover {
+  border-color: #60A5FA;
+  color: #60A5FA;
+}
+
+.ca-btn-run {
+  background: #3B82F6;
+  color: #FFFFFF;
+}
+
+.ca-btn-run:hover {
+  background: #2563EB;
+}
+
+/* Result bar shown after code assist completes */
+.ca-result-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #0D1117;
+  border-top: 1px solid #1E293B;
+}
+
+.ca-result-btn {
+  background: #22C55E;
+  color: #0B0F1A;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ca-result-btn:hover {
+  background: #16A34A;
+}
+
+.ca-result-cost {
+  font-size: 12px;
+  color: #6B7280;
 }

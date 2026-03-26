@@ -7,6 +7,7 @@ import { extractFeatureDescription, promptAndCommit } from "./commit.js";
 import { KaiClient } from "./KaiClient.js";
 import { getGitBranch, getLastCommitHash } from "./git.js";
 import {
+  extractFeatureId,
   generateFeatureId,
   isNewFeatureFile,
   markComplete,
@@ -330,8 +331,10 @@ export class KaiBot {
   private async handleFeatureFile(filePath: string, requestedAt: string): Promise<void> {
     let feature = parseFeature(filePath);
 
-    // Assign a unique feature ID
-    const featureId = generateFeatureId();
+    // Assign a feature ID — reuse any existing one already in the file
+    // (e.g. when a feature is retried from hold/) to avoid duplicate IDs.
+    const fileContentForId = readFileSync(filePath, "utf8");
+    const featureId = extractFeatureId(fileContentForId) ?? generateFeatureId();
     feature.featureId = featureId;
 
     // Capture description and git branch before the agent modifies the file
@@ -374,7 +377,13 @@ export class KaiBot {
       const changedFiles = getNewlyChangedFiles(this.projectDir, preExistingChanges);
 
       // Offer to auto-commit; defaults to Yes after 5s timeout
-      const committed = await promptAndCommit(feature, this.projectDir, featureId);
+      let committed = false;
+      try {
+        committed = await promptAndCommit(feature, this.projectDir, featureId);
+      } catch (commitErr) {
+        const msg = commitErr instanceof Error ? commitErr.message : String(commitErr);
+        uiStore.setStatusMessage(`Commit skipped (error): ${msg.split("\n")[0]}`);
+      }
       const gitCommitHash = committed ? getLastCommitHash(this.projectDir) : null;
 
       const summary = await generateSummary(feature, this.projectDir);
@@ -466,10 +475,11 @@ export class KaiBot {
     }
   }
 
-  /** Prepend a Feature ID line to the top of a feature file. */
+  /** Prepend a Feature ID line to the top of a feature file (no-op if already present). */
   private prependFeatureId(filePath: string, featureId: string): void {
     try {
       const content = readFileSync(filePath, "utf8");
+      if (extractFeatureId(content) !== null) return;
       writeFileSync(filePath, `Feature ID: ${featureId}\n\n${content}`);
     } catch {
       // Ignore if file can't be read/written

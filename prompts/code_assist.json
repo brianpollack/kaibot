@@ -1,0 +1,10 @@
+[
+  {
+    "name": "Tech-Debt Scan",
+    "description": "Scan the codebase for technical debt and generate a report.",
+    "author": "Brian Pollack",
+    "prompt": "tech_debt.md",
+    "result_action": "View TODO.md",
+    "result_open": "{projectDir}/todo.md"
+  }
+]

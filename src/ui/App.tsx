@@ -11,7 +11,7 @@ import {
 } from "./store.js";
 import { reviewAndWriteFeature } from "../feature_creator.js";
 import { getAvailableProviders, getModelsForProvider, type ProviderName } from "../models.js";
-import { runTechDebtScan } from "../tech_debt.js";
+import { loadCodeAssistOptions, runCodeAssist } from "../codeAssist.js";
 
 // ---------------------------------------------------------------------------
 // Hook: subscribe to UIStore changes
@@ -461,7 +461,7 @@ function HotkeyBar({
             <Text color="cyan" bold>
               {"[S]"}
             </Text>
-            <Text dimColor>{" Tech Debt  "}</Text>
+            <Text dimColor>{" Code Assist  "}</Text>
             <Text color="cyan" bold>
               {"[M]"}
             </Text>
@@ -857,21 +857,29 @@ export function App(): React.JSX.Element {
       }
 
       if (input.toLowerCase() === "s") {
+        const options = loadCodeAssistOptions();
+        const firstOption = options[0];
+        if (!firstOption) {
+          uiStore.setFlashMessage("No code assist options found");
+          setTimeout(() => uiStore.clearFlashMessage(), 3000);
+          return;
+        }
+
         uiStore.clearFlashMessage();
         uiStore.startTechDebtScan();
-        uiStore.setFlashMessage("Scanning for tech debt…");
+        uiStore.setFlashMessage(`Running: ${firstOption.name}…`);
 
         const { projectDir, model } = uiStore.getState();
 
-        runTechDebtScan(projectDir, model)
-          .then(() => {
+        runCodeAssist(firstOption, projectDir, model)
+          .then((result) => {
             uiStore.finishTechDebtScan();
-            uiStore.setFlashMessage("Tech debt scan complete — see todo.md");
+            uiStore.setFlashMessage(`${firstOption.name} complete — ${result.costInfo}`);
             setTimeout(() => uiStore.clearFlashMessage(), 4000);
           })
           .catch(() => {
             uiStore.finishTechDebtScan();
-            uiStore.setFlashMessage("Error running tech debt scan");
+            uiStore.setFlashMessage(`Error running ${firstOption.name}`);
             setTimeout(() => uiStore.clearFlashMessage(), 4000);
           });
       }

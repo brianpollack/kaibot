@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "http";
 import { randomBytes } from "crypto";
+import { EventEmitter } from "events";
 
 import { WebSocketServer } from "ws";
 
@@ -11,13 +12,15 @@ import { setupWebSocketHandler } from "./wsHandler.js";
 // Configuration
 // ---------------------------------------------------------------------------
 
+export type WebServerState = "waiting" | "active";
+
 export interface WebServerOptions {
   /** Port to listen on. Defaults to 8500. */
   port?: number;
   /** Host to bind to. Defaults to "127.0.0.1". */
   host?: string;
-  /** Absolute path to the target project directory. */
-  projectDir: string;
+  /** Absolute path to the target project directory. Optional — omit to start in "waiting" state. */
+  projectDir?: string;
   /** Current Claude model ID. */
   model: string;
 }
@@ -29,31 +32,44 @@ export interface WebServerOptions {
 /**
  * Lightweight HTTP + WebSocket server for the KaiBot web UI.
  * Uses Node's built-in `http` module — no Express or other frameworks.
+ *
+ * Can start in "waiting" state (no project dir) and transition to "active"
+ * once a project is selected via the web UI.
  */
-export class WebServer {
+export class WebServer extends EventEmitter {
   private readonly server: Server;
-  private readonly wss: WebSocketServer;
+  readonly wss: WebSocketServer;
   private readonly port: number;
   private readonly host: string;
-  readonly projectDir: string;
-  readonly npmRunner: NpmCommandRunner;
+  projectDir: string | null;
+  npmRunner: NpmCommandRunner | null;
   readonly hmacSecret: string;
   model: string;
+  state: WebServerState;
 
   constructor(opts: WebServerOptions) {
+    super();
     this.port = opts.port ?? 8500;
     this.host = opts.host ?? "127.0.0.1";
-    this.projectDir = opts.projectDir;
+    this.projectDir = opts.projectDir ?? null;
     this.model = opts.model;
-    this.npmRunner = new NpmCommandRunner(opts.projectDir);
     this.hmacSecret = randomBytes(32).toString("hex");
+
+    if (this.projectDir) {
+      this.npmRunner = new NpmCommandRunner(this.projectDir);
+      this.wireNpmRunner(this.npmRunner);
+      this.state = "active";
+    } else {
+      this.npmRunner = null;
+      this.state = "waiting";
+    }
 
     this.server = createServer((req: IncomingMessage, res: ServerResponse) => {
       handleRequest(req, res, this);
     });
 
     this.wss = new WebSocketServer({ server: this.server });
-    setupWebSocketHandler(this.wss, this.npmRunner, this.hmacSecret);
+    setupWebSocketHandler(this.wss, this.npmRunner, this.hmacSecret, this);
   }
 
   // -------------------------------------------------------------------------
@@ -71,9 +87,44 @@ export class WebServer {
     });
   }
 
+  /**
+   * Transition from "waiting" to "active" state with a project directory.
+   * Creates the NpmCommandRunner and notifies all WebSocket clients to reload.
+   */
+  activateProject(projectDir: string): void {
+    this.projectDir = projectDir;
+    this.npmRunner = new NpmCommandRunner(projectDir);
+    this.wireNpmRunner(this.npmRunner);
+    this.state = "active";
+
+    // Notify WebSocket clients to reload
+    for (const client of this.wss.clients) {
+      if (client.readyState === 1 /* OPEN */) {
+        client.send(JSON.stringify({ type: "project-activated", projectDir }));
+      }
+    }
+
+    this.emit("project-activated", projectDir);
+  }
+
+  /** Broadcast a message to all connected WebSocket clients. */
+  private broadcast(msg: object): void {
+    const payload = JSON.stringify(msg);
+    for (const client of this.wss.clients) {
+      if (client.readyState === 1 /* OPEN */) client.send(payload);
+    }
+  }
+
+  /** Wire package.json change events from an NpmCommandRunner to all WS clients. */
+  private wireNpmRunner(runner: NpmCommandRunner): void {
+    runner.on("scripts-changed", () => {
+      this.broadcast({ type: "npm-scripts-updated" });
+    });
+  }
+
   /** Gracefully shut down the server. */
   stop(): Promise<void> {
-    this.npmRunner.stopAll();
+    this.npmRunner?.stopAll();
     return new Promise((resolve) => {
       // Close all WebSocket connections
       for (const client of this.wss.clients) {

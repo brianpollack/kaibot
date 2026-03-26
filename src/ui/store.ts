@@ -130,9 +130,15 @@ export interface UIState {
   /** Whether the provider selector overlay is currently open. */
   isSelectingProvider: boolean;
 
-  // Tech debt scan
+  // Tech debt scan (legacy — kept for Ink hotkey compatibility)
   /** Whether a tech debt scan is currently running. */
   isScanningTechDebt: boolean;
+
+  // Code Assist
+  /** Whether a code assist run is in progress. */
+  codeAssistActive: boolean;
+  /** Result of the last code assist run (button label + file path), or null. */
+  codeAssistResult: { action: string; path: string } | null;
 
   // Status message (bottom bar)
   statusMessage: string;
@@ -179,6 +185,8 @@ class UIStore extends EventEmitter {
     provider: "anthropic",
     isSelectingProvider: false,
     isScanningTechDebt: false,
+    codeAssistActive: false,
+    codeAssistResult: null,
     statusMessage: "",
     followupFeatureId: null,
   };
@@ -440,6 +448,9 @@ class UIStore extends EventEmitter {
   /**
    * Show the commit prompt and return a promise that resolves to true (commit)
    * or false (skip). Auto-commits after 5 seconds if no input is received.
+   *
+   * A 15-second safety timeout ensures the promise always resolves even if
+   * the Ink UI countdown stalls or never fires (e.g. no TTY, render error).
    */
   showCommitPrompt(message: string): Promise<boolean> {
     this.state.commitPrompt = { visible: true, message, countdown: 5 };
@@ -447,6 +458,23 @@ class UIStore extends EventEmitter {
 
     return new Promise<boolean>((resolve) => {
       this.commitResolve = resolve;
+
+      // Safety net: resolve after 15s even if the UI never calls resolveCommitPrompt
+      const safetyTimer = setTimeout(() => {
+        if (this.commitResolve === resolve) {
+          this.commitResolve = null;
+          this.state.commitPrompt = { visible: false, message: "", countdown: 0 };
+          this.emitChange();
+          resolve(true);
+        }
+      }, 15_000);
+
+      // Wrap resolve so the safety timer is always cancelled on normal resolution
+      const originalResolve = this.commitResolve;
+      this.commitResolve = (commit: boolean) => {
+        clearTimeout(safetyTimer);
+        originalResolve(commit);
+      };
     });
   }
 
@@ -575,6 +603,29 @@ class UIStore extends EventEmitter {
     this.emitChange();
   }
 
+  // -- Code Assist -----------------------------------------------------------
+
+  /** Mark that a code assist run is in progress. */
+  startCodeAssist(): void {
+    this.state.codeAssistActive = true;
+    this.state.codeAssistResult = null;
+    this.emitChange();
+  }
+
+  /** Mark that a code assist run has finished. */
+  finishCodeAssist(result: { action: string; path: string } | null): void {
+    this.state.codeAssistActive = false;
+    this.state.codeAssistResult = result;
+    this.emitChange();
+  }
+
+  /** Clear the code assist result (e.g. when returning to dashboard). */
+  clearCodeAssist(): void {
+    this.state.codeAssistActive = false;
+    this.state.codeAssistResult = null;
+    this.emitChange();
+  }
+
   /** Emit a quit request so the CLI entry point can perform graceful shutdown. */
   requestQuit(): void {
     this.emit("quit");
@@ -601,6 +652,8 @@ class UIStore extends EventEmitter {
     this.state.isSelectingModel = false;
     this.state.isSelectingProvider = false;
     this.state.isScanningTechDebt = false;
+    this.state.codeAssistActive = false;
+    this.state.codeAssistResult = null;
     this.state.statusMessage = "";
     this.state.followupFeatureId = null;
     this.emitChange();

@@ -31,6 +31,15 @@ export function generateFeatureId(): string {
   return randomBytes(6).toString("base64url");
 }
 
+/**
+ * Scans file content for an existing `Feature ID: <id>` line and returns the
+ * ID if found, or `null` if none is present.
+ */
+export function extractFeatureId(content: string): string | null {
+  const match = /^Feature ID:\s+(\S+)/m.exec(content);
+  return match ? match[1] : null;
+}
+
 // ---------------------------------------------------------------------------
 // File name helpers
 // ---------------------------------------------------------------------------

@@ -4,6 +4,367 @@ import type { WebServer } from "./WebServer.js";
 import { getTodaySpend } from "./spendTracker.js";
 
 // ---------------------------------------------------------------------------
+// Project selection page (shown when no project directory is configured)
+// ---------------------------------------------------------------------------
+
+/**
+ * Render the project selection page — shown when the server is in "waiting" state.
+ * Displays a centered dialog over the KaiBot background image where users can
+ * type a folder path or click a recent project.
+ */
+export function renderProjectSelectionPage(_server: WebServer): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Protovate KaiBot — Select Project</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; width: 100%;
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+      color: #FFFFFF;
+      background-color: #0B0F1A;
+      background-image: url('/static/images/KaiBackground.jpg');
+      background-size: cover;
+      background-position: center;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: rgba(11, 15, 26, 0.92);
+      border: 1px solid #1E293B;
+      border-radius: 12px;
+      padding: 40px 36px 32px;
+      width: 520px;
+      max-width: 92vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .logo {
+      text-align: center;
+      font-size: 28px;
+      font-weight: 700;
+      color: #60A5FA;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #9CA3AF;
+      font-size: 13px;
+      margin-bottom: 28px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      color: #9CA3AF;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    input[type="text"] {
+      flex: 1;
+      background: #121826;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 10px 14px;
+      color: #FFFFFF;
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+    }
+    input[type="text"]:focus { border-color: #3B82F6; }
+    input[type="text"]::placeholder { color: #4B5563; }
+    .open-btn {
+      background: #3B82F6;
+      color: #FFFFFF;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 20px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .open-btn:hover { background: #2563EB; }
+    .open-btn:disabled { opacity: 0.5; cursor: default; }
+    .error-msg {
+      color: #EF4444;
+      font-size: 13px;
+      margin-top: -16px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .recent-header {
+      font-size: 12px;
+      color: #9CA3AF;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+    .recent-list {
+      list-style: none;
+    }
+    .recent-list li {
+      padding: 10px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: #D1D5DB;
+      font-size: 13px;
+      transition: background 0.15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .recent-list li:hover { background: #1E293B; color: #FFFFFF; }
+    .recent-list li.missing { color: #6B7280; text-decoration: line-through; cursor: default; }
+    .recent-list li.missing:hover { background: transparent; color: #6B7280; }
+    .no-recent {
+      color: #4B5563;
+      font-size: 13px;
+      text-align: center;
+      padding: 20px 0;
+    }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid #334155;
+      border-top-color: #3B82F6;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .apikey-help-row { text-align: center; margin-bottom: 12px; }
+    .help-btn {
+      background: transparent;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #60A5FA;
+      padding: 6px 16px;
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .help-btn:hover { border-color: #3B82F6; background: rgba(59,130,246,0.08); }
+    input[type="password"] {
+      flex: 1;
+      background: #121826;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 10px 14px;
+      color: #FFFFFF;
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+    }
+    input[type="password"]:focus { border-color: #3B82F6; }
+    input[type="password"]::placeholder { color: #4B5563; }
+    .apikey-hint {
+      font-size: 11px;
+      color: #6B7280;
+      margin-top: 6px;
+      margin-bottom: 8px;
+    }
+    #apikey-error { margin-top: 0; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">&#x1F916; Protovate KaiBot</div>
+    <div class="subtitle">Select a project folder to get started</div>
+
+    <label for="path-input">Project Folder</label>
+    <div class="input-row">
+      <input type="text" id="path-input" placeholder="/path/to/your/project" autocomplete="off" autofocus />
+      <button class="open-btn" id="open-btn">Open</button>
+    </div>
+    <div class="error-msg" id="error-msg"></div>
+
+    <!-- API key helper — shown when project needs ANTHROPIC_API_KEY -->
+    <div id="apikey-section" style="display:none">
+      <div class="apikey-help-row">
+        <button class="help-btn" id="help-apikey-btn">Help me add it</button>
+      </div>
+      <div id="apikey-input-area" style="display:none">
+        <label for="apikey-input">Anthropic API Key</label>
+        <div class="input-row">
+          <input type="password" id="apikey-input" placeholder="sk-ant-…" autocomplete="off" />
+          <button class="open-btn" id="save-apikey-btn">Save &amp; Open</button>
+        </div>
+        <div class="apikey-hint">Your key will be validated and saved to the project's .env file</div>
+        <div class="error-msg" id="apikey-error"></div>
+      </div>
+    </div>
+
+    <div class="recent-header">Recent Projects</div>
+    <ul class="recent-list" id="recent-list">
+      <li class="no-recent">Loading…</li>
+    </ul>
+  </div>
+
+  <script>
+  (function() {
+    const pathInput = document.getElementById('path-input');
+    const openBtn = document.getElementById('open-btn');
+    const errorMsg = document.getElementById('error-msg');
+    const recentList = document.getElementById('recent-list');
+    const apikeySection = document.getElementById('apikey-section');
+    const helpApikeyBtn = document.getElementById('help-apikey-btn');
+    const apikeyInputArea = document.getElementById('apikey-input-area');
+    const apikeyInput = document.getElementById('apikey-input');
+    const saveApikeyBtn = document.getElementById('save-apikey-btn');
+    const apikeyError = document.getElementById('apikey-error');
+    let pendingProjectDir = null;
+
+    // Load recent paths
+    fetch('/api/path-history')
+      .then(r => r.json())
+      .then(data => {
+        const paths = data.paths || [];
+        if (paths.length === 0) {
+          recentList.innerHTML = '<li class="no-recent">No recent projects</li>';
+          return;
+        }
+        recentList.innerHTML = '';
+        paths.forEach(entry => {
+          const li = document.createElement('li');
+          li.textContent = entry.path;
+          if (!entry.exists) {
+            li.classList.add('missing');
+            li.title = 'Directory no longer exists';
+          } else {
+            li.addEventListener('click', () => selectProject(entry.path));
+          }
+          recentList.appendChild(li);
+        });
+      })
+      .catch(() => {
+        recentList.innerHTML = '<li class="no-recent">Could not load history</li>';
+      });
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+    }
+    function hideError() {
+      errorMsg.style.display = 'none';
+      apikeySection.style.display = 'none';
+      apikeyInputArea.style.display = 'none';
+      apikeyError.style.display = 'none';
+    }
+
+    function selectProject(path) {
+      hideError();
+      openBtn.disabled = true;
+      openBtn.innerHTML = '<span class="spinner"></span>Opening…';
+
+      fetch('/api/select-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path })
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) {
+            window.location.href = '/main';
+          } else {
+            showError(data.error || 'Unknown error');
+            openBtn.disabled = false;
+            openBtn.textContent = 'Open';
+            if (data.needsApiKey) {
+              pendingProjectDir = data.projectDir;
+              apikeySection.style.display = 'block';
+              apikeyInputArea.style.display = 'none';
+            }
+          }
+        })
+        .catch(() => {
+          showError('Network error — is the server running?');
+          openBtn.disabled = false;
+          openBtn.textContent = 'Open';
+        });
+    }
+
+    // "Help me add it" button — reveal the key input
+    helpApikeyBtn.addEventListener('click', () => {
+      apikeyInputArea.style.display = 'block';
+      helpApikeyBtn.style.display = 'none';
+      apikeyInput.focus();
+    });
+
+    // Save & validate the API key
+    function saveApiKey() {
+      const key = apikeyInput.value.trim();
+      if (!key) {
+        apikeyError.textContent = 'Please paste your API key';
+        apikeyError.style.display = 'block';
+        return;
+      }
+      apikeyError.style.display = 'none';
+      saveApikeyBtn.disabled = true;
+      saveApikeyBtn.innerHTML = '<span class="spinner"></span>Validating…';
+
+      fetch('/api/save-api-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key, projectDir: pendingProjectDir })
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) {
+            // Key saved — retry opening the project
+            hideError();
+            selectProject(pendingProjectDir);
+          } else {
+            apikeyError.textContent = data.error || 'Validation failed';
+            apikeyError.style.display = 'block';
+            saveApikeyBtn.disabled = false;
+            saveApikeyBtn.innerHTML = 'Save &amp; Open';
+          }
+        })
+        .catch(() => {
+          apikeyError.textContent = 'Network error';
+          apikeyError.style.display = 'block';
+          saveApikeyBtn.disabled = false;
+          saveApikeyBtn.innerHTML = 'Save &amp; Open';
+        });
+    }
+
+    saveApikeyBtn.addEventListener('click', saveApiKey);
+    apikeyInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') saveApiKey();
+    });
+
+    openBtn.addEventListener('click', () => {
+      const path = pathInput.value.trim();
+      if (!path) { showError('Please enter a folder path'); return; }
+      selectProject(path);
+    });
+
+    pathInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        const path = pathInput.value.trim();
+        if (!path) { showError('Please enter a folder path'); return; }
+        selectProject(path);
+      }
+    });
+  })();
+  </script>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -25,23 +386,26 @@ function esc(str: string): string {
  * updates and rc-dock panel management.
  */
 export function renderMainPage(server: WebServer): string {
-  const projectName = basename(server.projectDir);
-  const projectPath = server.projectDir;
+  const projectName = basename(server.projectDir ?? "");
+  const projectPath = server.projectDir ?? "";
   const model = server.model;
   const provider = "Anthropic";
-  const todaySpend = getTodaySpend(server.projectDir);
+  const todaySpend = getTodaySpend(server.projectDir ?? "");
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>KaiBot — ${esc(projectName)}</title>
+  <title>Protovate KaiBot — ${esc(projectName)}</title>
 
   <!-- App styles (no external CDN dependencies) -->
   <link rel="stylesheet" href="/static/css/main.css" />
   <!-- Ace Editor for settings file editing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.min.js"></script>
+  <!-- Syntax highlighting for code blocks in conversation -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
   <!-- Session signing key — injected server-side, used for HMAC request signing -->
   <script>window.__KAIBOT_KEY = "${server.hmacSecret}";</script>
 </head>
@@ -50,7 +414,7 @@ export function renderMainPage(server: WebServer): string {
   <!-- ── Top Status Bar ─────────────────────────────────────────────── -->
   <header id="top-status" role="banner">
     <div class="status-left">
-      <span class="logo" aria-label="KaiBot">&#x1F916; KaiBot</span>
+      <span class="logo" aria-label="Protovate KaiBot">&#x1F916; Protovate KaiBot</span>
       <span id="bot-status" class="badge badge-idle" role="status" aria-live="polite">IDLE</span>
     </div>
     <div class="status-right">
@@ -120,12 +484,20 @@ export function renderMainPage(server: WebServer): string {
           </a>
         </li>
         <li>
-          <a href="#code-review" class="nav-item"
-             title="Code Review [^]"
+          <a href="#code-assist" class="nav-item"
+             title="Code Assist [^]"
              id="nav-codereview">
             <span class="nav-icon" aria-hidden="true">&#x1F4DD;</span>
-            <span class="nav-label">Code Review</span>
+            <span class="nav-label">Code Assist</span>
             <kbd aria-hidden="true">^</kbd>
+          </a>
+        </li>
+        <li id="nav-todo-item" style="display:none">
+          <a href="#todo" class="nav-item"
+             title="TODO List"
+             id="nav-todo">
+            <span class="nav-icon" aria-hidden="true">&#x2714;&#xFE0F;</span>
+            <span class="nav-label">TODO List</span>
           </a>
         </li>
       </ul>
@@ -281,18 +653,8 @@ export function renderMainPage(server: WebServer): string {
         <input type="text" id="nf-title" class="dialog-input"
                placeholder="Feature title…" autocomplete="off" />
 
-        <label class="dialog-label" for="nf-description">Description</label>
-        <div class="md-toolbar">
-          <button type="button" class="md-btn" data-md="bold" title="Bold (Ctrl+B)"><b>B</b></button>
-          <button type="button" class="md-btn" data-md="italic" title="Italic (Ctrl+I)"><i>I</i></button>
-          <button type="button" class="md-btn" data-md="heading" title="Heading">#</button>
-          <button type="button" class="md-btn" data-md="ul" title="Bullet list">•</button>
-          <button type="button" class="md-btn" data-md="ol" title="Numbered list">1.</button>
-          <button type="button" class="md-btn" data-md="code" title="Code">&lt;/&gt;</button>
-          <button type="button" class="md-btn" data-md="link" title="Link">&#x1F517;</button>
-        </div>
-        <textarea id="nf-description" class="dialog-textarea"
-                  placeholder="Describe the feature in Markdown…" rows="12"></textarea>
+        <label class="dialog-label">Description</label>
+        <div id="nf-description-editor"></div>
 
         <div id="nf-error" class="dialog-error" style="display:none"></div>
       </div>

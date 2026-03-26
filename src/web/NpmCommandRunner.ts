@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, watch, type FSWatcher } from "fs";
 import { join } from "path";
 import { spawn, type ChildProcess } from "child_process";
 
@@ -34,10 +34,32 @@ export class NpmCommandRunner extends EventEmitter {
   private readonly outputBuffers = new Map<string, string>();
   private readonly scriptInfos = new Map<string, NpmScriptInfo>();
   private static readonly MAX_BUFFER = 256 * 1024; // 256 KB per script
+  private pkgWatcher: FSWatcher | null = null;
+  private pkgDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(projectDir: string) {
     super();
     this.projectDir = projectDir;
+    this.watchPackageJson();
+  }
+
+  /** Watch package.json for changes and emit "scripts-changed" when it's modified. */
+  private watchPackageJson(): void {
+    const pkgPath = join(this.projectDir, "package.json");
+    if (!existsSync(pkgPath)) return;
+    try {
+      this.pkgWatcher = watch(pkgPath, () => {
+        // Debounce: ignore rapid successive events (editors often write multiple times)
+        if (this.pkgDebounceTimer) clearTimeout(this.pkgDebounceTimer);
+        this.pkgDebounceTimer = setTimeout(() => {
+          this.pkgDebounceTimer = null;
+          this.emit("scripts-changed");
+        }, 300);
+      });
+      this.pkgWatcher.on("error", () => { /* ignore watch errors */ });
+    } catch {
+      // fs.watch unsupported or file disappeared — non-critical
+    }
   }
 
   /** Read npm scripts from the project's package.json. */
@@ -157,10 +179,13 @@ export class NpmCommandRunner extends EventEmitter {
     }
   }
 
-  /** Stop all running processes (call on server shutdown). */
+  /** Stop all running processes and the package.json watcher (call on server shutdown). */
   stopAll(): void {
     for (const name of [...this.processes.keys()]) {
       this.stop(name);
     }
+    if (this.pkgDebounceTimer) clearTimeout(this.pkgDebounceTimer);
+    this.pkgWatcher?.close();
+    this.pkgWatcher = null;
   }
 }

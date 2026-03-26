@@ -15,6 +15,7 @@ function isGitRepo(cwd: string): boolean {
       cwd,
       encoding: "utf8",
       stdio: "pipe",
+      timeout: 10_000,
     });
     return true;
   } catch {
@@ -29,6 +30,7 @@ function hasChanges(cwd: string): boolean {
       cwd,
       encoding: "utf8",
       stdio: "pipe",
+      timeout: 10_000,
     });
     return status.trim().length > 0;
   } catch {
@@ -120,16 +122,17 @@ export async function promptAndCommit(
   }
 
   try {
-    execSync("git add -A", { cwd: projectDir, stdio: "pipe" });
+    execSync("git add -A", { cwd: projectDir, stdio: "pipe", timeout: 30_000 });
     execSync(`git commit -m ${JSON.stringify(message)}`, {
       cwd: projectDir,
       stdio: "pipe",
+      timeout: 30_000,
     });
     uiStore.setStatusMessage(`Committed: "${message}"`);
     return true;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    uiStore.setStatusMessage(`Commit failed: ${errMsg}`);
+    uiStore.setStatusMessage(`Commit failed: ${errMsg.split("\n")[0]}`);
     return false;
   }
 }

@@ -3,6 +3,7 @@ import type { WebSocket, WebSocketServer } from "ws";
 import { uiStore, type ConversationItem, type UIState } from "../ui/store.js";
 import { getTodaySpend } from "./spendTracker.js";
 import type { NpmCommandRunner } from "./NpmCommandRunner.js";
+import type { WebServer } from "./WebServer.js";
 import { closeSession, hasSession, sendFollowup } from "./followupSession.js";
 import { verifyWsHmac } from "./hmac.js";
 
@@ -28,6 +29,8 @@ export interface WebUIState {
   statusMessage: string;
   todaySpend: number;
   followupFeatureId: string | null;
+  codeAssistActive: boolean;
+  codeAssistResult: { action: string; path: string } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +62,8 @@ export function getWebState(): WebUIState {
     statusMessage: s.statusMessage,
     todaySpend: getTodaySpend(s.projectDir),
     followupFeatureId: s.followupFeatureId,
+    codeAssistActive: s.codeAssistActive,
+    codeAssistResult: s.codeAssistResult,
   };
 }
 
@@ -91,14 +96,10 @@ function broadcastRaw(payload: unknown): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Register WebSocket handlers and subscribe to uiStore + NpmCommandRunner changes.
- * Call once during server startup.
+ * Wire npm runner events to broadcast. Called when npmRunner becomes available
+ * (either at startup or after project activation).
  */
-export function setupWebSocketHandler(wss: WebSocketServer, npmRunner: NpmCommandRunner, hmacSecret: string): void {
-  // Subscribe to uiStore changes and broadcast to all clients
-  uiStore.on("change", broadcast);
-
-  // Subscribe to npm runner events and broadcast to all clients
+function wireNpmEvents(npmRunner: NpmCommandRunner): void {
   npmRunner.on("output", ({ script, chunk }: { script: string; chunk: string }) => {
     broadcastRaw({ type: "npm-output", script, chunk });
   });
@@ -107,6 +108,32 @@ export function setupWebSocketHandler(wss: WebSocketServer, npmRunner: NpmComman
   });
   npmRunner.on("clear", ({ script }: { script: string }) => {
     broadcastRaw({ type: "npm-clear", script });
+  });
+}
+
+/**
+ * Register WebSocket handlers and subscribe to uiStore + NpmCommandRunner changes.
+ * Call once during server startup.
+ */
+export function setupWebSocketHandler(
+  wss: WebSocketServer,
+  npmRunner: NpmCommandRunner | null,
+  hmacSecret: string,
+  server: WebServer,
+): void {
+  // Subscribe to uiStore changes and broadcast to all clients
+  uiStore.on("change", broadcast);
+
+  // Subscribe to npm runner events if already available
+  if (npmRunner) {
+    wireNpmEvents(npmRunner);
+  }
+
+  // When a project is activated later, wire up the new npm runner
+  server.on("project-activated", () => {
+    if (server.npmRunner) {
+      wireNpmEvents(server.npmRunner);
+    }
   });
 
   wss.on("connection", (ws: WebSocket) => {
@@ -126,14 +153,17 @@ export function setupWebSocketHandler(wss: WebSocketServer, npmRunner: NpmComman
         if (msg.type === "select-provider" && typeof msg.provider === "string") {
           uiStore.selectProvider(msg.provider);
         }
-        if (msg.type === "npm-start" && typeof msg.script === "string") {
-          npmRunner.start(msg.script);
-        }
-        if (msg.type === "npm-stop" && typeof msg.script === "string") {
-          npmRunner.stop(msg.script);
-        }
-        if (msg.type === "npm-restart" && typeof msg.script === "string") {
-          npmRunner.restart(msg.script);
+        // npm commands — only when a project is active
+        if (server.npmRunner) {
+          if (msg.type === "npm-start" && typeof msg.script === "string") {
+            server.npmRunner.start(msg.script);
+          }
+          if (msg.type === "npm-stop" && typeof msg.script === "string") {
+            server.npmRunner.stop(msg.script);
+          }
+          if (msg.type === "npm-restart" && typeof msg.script === "string") {
+            server.npmRunner.restart(msg.script);
+          }
         }
         if (msg.type === "feature-followup" && typeof msg.featureId === "string" && typeof msg.message === "string") {
           if (hasSession(msg.featureId)) {
