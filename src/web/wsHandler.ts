@@ -1,3 +1,5 @@
+import { watch, type FSWatcher } from "fs";
+import { join } from "path";
 import type { WebSocket, WebSocketServer } from "ws";
 
 import { uiStore, type ConversationItem, type UIState } from "../ui/store.js";
@@ -111,6 +113,44 @@ function wireNpmEvents(npmRunner: NpmCommandRunner): void {
   });
 }
 
+// ---------------------------------------------------------------------------
+// todo.json file watcher
+// ---------------------------------------------------------------------------
+
+let todoWatcher: FSWatcher | null = null;
+let todoDebounce: ReturnType<typeof setTimeout> | null = null;
+
+function wireTodoWatcher(projectDir: string): void {
+  // Clean up any previous watcher
+  if (todoWatcher) {
+    todoWatcher.close();
+    todoWatcher = null;
+  }
+  if (todoDebounce) {
+    clearTimeout(todoDebounce);
+    todoDebounce = null;
+  }
+
+  const todoPath = join(projectDir, "todo.json");
+
+  try {
+    // Watch the directory instead of the file so we catch creation and deletion too
+    todoWatcher = watch(projectDir, (_event, filename) => {
+      if (filename !== "todo.json") return;
+      // Debounce rapid successive events (editors write in multiple steps)
+      if (todoDebounce) clearTimeout(todoDebounce);
+      todoDebounce = setTimeout(() => {
+        todoDebounce = null;
+        broadcastRaw({ type: "todo-updated" });
+      }, 300);
+    });
+  } catch {
+    // If the directory doesn't exist yet, silently skip
+  }
+
+  void todoPath; // suppress unused warning
+}
+
 /**
  * Register WebSocket handlers and subscribe to uiStore + NpmCommandRunner changes.
  * Call once during server startup.
@@ -129,11 +169,12 @@ export function setupWebSocketHandler(
     wireNpmEvents(npmRunner);
   }
 
-  // When a project is activated later, wire up the new npm runner
-  server.on("project-activated", () => {
+  // When a project is activated later, wire up the new npm runner and todo watcher
+  server.on("project-activated", (projectDir: string) => {
     if (server.npmRunner) {
       wireNpmEvents(server.npmRunner);
     }
+    wireTodoWatcher(projectDir);
   });
 
   wss.on("connection", (ws: WebSocket) => {

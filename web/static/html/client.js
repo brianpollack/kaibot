@@ -593,6 +593,8 @@ function connectWebSocket() {
         handleNpmMessage(msg);
       } else if (msg.type === "npm-scripts-updated") {
         loadNpmScripts();
+      } else if (msg.type === "todo-updated" || msg.type === "project-activated") {
+        loadTodoNavItem();
       }
     } catch (e) {
       // Ignore malformed messages
