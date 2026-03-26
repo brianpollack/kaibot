@@ -1,9 +1,13 @@
-# KaiBot /ˈkaɪ.bɒt/ or Kye-Baht
+# Protovate KaiBot /ˈkaɪ.bɒt/ or Kye-Baht
 
 ## Background
 
-This project is based on the Clause Agent SDK Quick Start Example for
-Complex 2 process Coding Agents
+This project is based on the Clause Agent SDK and provides tools to help
+manage AI features for a project.
+
+## Download
+
+[Download Here](https://github.com/brianpollack/kaibot/releases)
 
 ## Usage
 
@@ -22,15 +26,15 @@ You can also place these in `<project>/.env`. KaiBot loads the target project's 
 
 ### Running the bot
 
-| Command                           | Description                                                   |
-|-----------------------------------|---------------------------------------------------------------|
-| `npm run bot -- /path/to/project`            | Watch Linear issues (when configured) or `features/` `.md` files |
-| `npm run local`                              | Same as `bot` but targets the current directory (`.`)         |
-| `npm run feature -- Add user authentication` | Create a Linear issue (when configured) or feature file with AI review |
+| Command                                      | Description                                                                      |
+|----------------------------------------------|----------------------------------------------------------------------------------|
+| `npm run bot -- /path/to/project`            | Watch Linear issues (when configured) or `features/` `.md` files                 |
+| `npm run local`                              | Same as `bot` but targets the current directory (`.`)                            |
+| `npm run feature -- Add user authentication` | Create a Linear issue (when configured) or feature file with AI review           |
 | `npm run models`                             | List available models (loads `.env`; pass `-- openrouter` for OpenRouter models) |
-| `npm run testOpenrouter`                     | Spawn an OpenRouter agent, ask "Tell me about yourself", and print the result |
-| `npm run dev`                                | Run the dev entry point (`src/index.ts`) via tsx              |
-| `npm start`                                  | Run the compiled bot from `dist/index.js` (requires a build)  |
+| `npm run testOpenrouter`                     | Spawn an OpenRouter agent, ask "Tell me about yourself", and print the result    |
+| `npm run dev`                                | Run the dev entry point (`src/index.ts`) via tsx                                 |
+| `npm start`                                  | Run the compiled bot from `dist/index.js` (requires a build)                     |
 
 ### Development
 
