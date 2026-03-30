@@ -135,7 +135,10 @@ function renderThinkingLines(text) {
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i];
     if (line.trim()) {
-      html += '<div class="conv-thinking-line">' + escHtml(line) + "</div>";
+      // Insert <br> when punctuation (.!?;:,) is immediately followed by a letter
+      var escaped = escHtml(line);
+      escaped = escaped.replace(/([.!?;:,])([A-Za-z])/g, "$1<br>$2");
+      html += '<div class="conv-thinking-line">' + escaped + "</div>";
     } else {
       html += '<div class="conv-thinking-gap"></div>';
     }
@@ -193,7 +196,10 @@ var ConversationBlockRenderer = {
 
   // -- Thinking block -------------------------------------------------------
   _thinking: function (item, mode) {
-    var html = '<div class="conv-thinking">' + renderThinkingContent(String(item.content || "")) + "</div>";
+    var html = '<div class="conv-thinking">' +
+      '<img class="conv-thinking-icon" src="/static/images/thinking64x64.png" alt="thinking" />' +
+      '<div class="conv-thinking-body">' + renderThinkingContent(String(item.content || "")) + '</div>' +
+      "</div>";
     return this._wrapBlock(item, mode, html);
   },
 

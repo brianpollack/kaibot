@@ -142,3 +142,6 @@ Implemented clickable "Project" label in the top status bar that returns the use
 March 30th, 2026: main: brian
 Replaced the 🤖 emoji placeholder logo with the actual KaiBot logo image throughout the web UI:
 
+March 30th, 2026: main: brian
+Improved the thinking block display in the web conversation view:
+

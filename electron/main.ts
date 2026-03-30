@@ -111,7 +111,7 @@ async function createWindow(): Promise<void> {
     const model =
       provider === "openrouter"
         ? getOpenRouterModel()
-        : process.env.KAI_MODEL ?? savedSettings.model ?? "claude-opus-4-6";
+        : (process.env.KAI_MODEL ?? savedSettings.model ?? "claude-opus-4-6");
 
     webServer.model = model;
 
@@ -188,7 +188,8 @@ function setupAutoUpdater(): void {
       type: "info",
       title: "Update Ready",
       message: "A new version of KaiBot has been downloaded.",
-      detail: "Restart now to apply the update, or it will be installed automatically when you quit.",
+      detail:
+        "Restart now to apply the update, or it will be installed automatically when you quit.",
       buttons: ["Restart Now", "Later"],
       defaultId: 0,
       cancelId: 1,

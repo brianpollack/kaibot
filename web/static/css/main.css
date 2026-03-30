@@ -466,10 +466,26 @@ ul {
 
 /* ── Conversation feed ───────────────────────────────────────────────── */
 
-/* Thinking block wrapper — ensure each block starts on its own line */
+/* Thinking block wrapper — icon on the left, content on the right */
 .conv-thinking {
   clear: both;
   margin: 2px 0;
+  padding: 10px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.conv-thinking-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-top: 2px;
+}
+
+.conv-thinking-body {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Thinking text — white, readable prose */
