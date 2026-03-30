@@ -1303,6 +1303,13 @@ ul {
   flex-shrink: 0;
 }
 
+#status-message {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 /* ---------------------------------------------------------------------------
    Accessibility: skip link
    --------------------------------------------------------------------------- */

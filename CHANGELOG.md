@@ -154,3 +154,6 @@ Updated both ACE editor instances in `web/static/html/client.js` to use the `ace
 March 30th, 2026: main: brian
 Implemented a "Working" modal dialog that displays a full-screen overlay when the user clicks "Submit to Assistant". The overlay includes the existing `thinking64x64.png` image (with a TODO to replace with `robot_working.png`), a CSS-animated spinner, and a randomly cycling phrase from an array of 100 humorous messages that updates every 3.5 seconds with a fade transition. The dialog opens immediately before the `/api/features/assist` API call and closes programmatically when the response arrives (success or error). It sits above all other overlays at z-index 1300 and cannot be dismissed by clicking outside. Files changed: `web/static/css/main.css`, `src/web/templates.ts`, `web/static/html/client.js`.
 
+March 30th, 2026: main: brian
+Added a `#status-message` CSS rule in `web/static/css/main.css` immediately after the `#bottom-status` block. The rule applies `white-space: nowrap`, `overflow: hidden`, `text-overflow: ellipsis`, and `min-width: 0` to ensure long status messages are truncated with an ellipsis instead of wrapping and breaking the fixed 30px footer height. This is a CSS-only change with no logic modifications.
+
