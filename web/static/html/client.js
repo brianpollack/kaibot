@@ -1905,6 +1905,159 @@ function loadFeaturesData() {
 }
 
 // ---------------------------------------------------------------------------
+// Working / Busy Dialog
+// ---------------------------------------------------------------------------
+
+var workingPhraseInterval = null;
+
+var workingPhrases = [
+  "Thinking hard…",
+  "Updating the rule book…",
+  "Learning to spell…",
+  "Reticulating splines…",
+  "Consulting the oracle…",
+  "Untangling spaghetti code…",
+  "Polishing the pixels…",
+  "Feeding the hamsters…",
+  "Calibrating the flux capacitor…",
+  "Asking the rubber duck…",
+  "Herding semicolons…",
+  "Compiling excuses…",
+  "Warming up the neurons…",
+  "Counting backwards from infinity…",
+  "Reversing the polarity…",
+  "Aligning the stars…",
+  "Waking up the interns…",
+  "Consulting Stack Overflow…",
+  "Googling the answer…",
+  "Downloading more RAM…",
+  "Defragmenting the cloud…",
+  "Refactoring the universe…",
+  "Optimizing the hamster wheel…",
+  "Spinning up the flux drive…",
+  "Rebooting the imagination…",
+  "Summoning the code wizards…",
+  "Negotiating with the compiler…",
+  "Bribing the linter…",
+  "Teaching robots to dream…",
+  "Generating synthetic enthusiasm…",
+  "Resolving merge conflicts in the space-time continuum…",
+  "Asking ChatGPT for a second opinion…",
+  "Translating to binary and back…",
+  "Debugging the meaning of life…",
+  "Searching for missing semicolons…",
+  "Reorganizing the bit bucket…",
+  "Tuning the hyperparameters…",
+  "Feeding tokens to the model…",
+  "Adjusting the reality distortion field…",
+  "Recalibrating the sarcasm detector…",
+  "Shuffling the deck chairs…",
+  "Poking the API with a stick…",
+  "Painting invisible pixels…",
+  "Charging the creativity capacitor…",
+  "Running on pure vibes…",
+  "Converting caffeine to code…",
+  "Wrangling the syntax tree…",
+  "Massaging the data…",
+  "Consulting the ancient scrolls…",
+  "Performing arcane computations…",
+  "Channeling the spirit of Turing…",
+  "Rotating the endofunctor…",
+  "Unwrapping the monads…",
+  "Traversing the abstract syntax tree…",
+  "Shaking the magic 8-ball…",
+  "Reading the tea leaves…",
+  "Phoning a friend…",
+  "Waiting for inspiration to strike…",
+  "Doing the robot dance…",
+  "Stretching the imagination…",
+  "Building a pillow fort for ideas…",
+  "Herding cats…",
+  "Sorting the unsortable…",
+  "Dividing by almost zero…",
+  "Measuring the immeasurable…",
+  "Contemplating the void…",
+  "Staring into the abyss of code…",
+  "Asking for directions…",
+  "Rearranging deck chairs on the Titanic…",
+  "Polishing the crystal ball…",
+  "Making it up as we go…",
+  "Consulting the committee…",
+  "Arguing with the type checker…",
+  "Questioning life choices…",
+  "Pretending to be productive…",
+  "Loading loading screen…",
+  "Inventing new algorithms…",
+  "Folding the protein…",
+  "Petting the Schrödinger's cat…",
+  "Inflating the complexity bubble…",
+  "Mining for insights…",
+  "Constructing the answer matrix…",
+  "Warming up the GPUs…",
+  "Putting on the thinking cap…",
+  "Consulting the hive mind…",
+  "Running the gauntlet…",
+  "Solving P vs NP real quick…",
+  "Calculating the meaning of 42…",
+  "Aligning the chakras…",
+  "Brewing the secret sauce…",
+  "Juggling priorities…",
+  "Composing a symphony of bytes…",
+  "Whispering to the electrons…",
+  "Negotiating with entropy…",
+  "Assembling the Avengers…",
+  "Coaxing the bits into place…",
+  "Painting by numbers…",
+  "Knitting a sweater for the server…",
+  "Watering the decision tree…",
+  "Feeding the neural network…",
+  "Rounding up the usual suspects…",
+  "Checking under the couch cushions…",
+];
+
+function showWorkingDialog() {
+  var overlay = document.getElementById("working-overlay");
+  if (!overlay) return;
+  overlay.style.display = "";
+
+  var phraseEl = document.getElementById("working-phrase");
+  var lastIndex = -1;
+
+  function cyclePhrases() {
+    if (!phraseEl) return;
+    var idx;
+    do {
+      idx = Math.floor(Math.random() * workingPhrases.length);
+    } while (idx === lastIndex && workingPhrases.length > 1);
+    lastIndex = idx;
+    phraseEl.style.opacity = "0";
+    setTimeout(function () {
+      phraseEl.textContent = workingPhrases[idx];
+      phraseEl.style.opacity = "1";
+    }, 200);
+  }
+
+  // Set initial phrase
+  if (phraseEl) {
+    var initIdx = Math.floor(Math.random() * workingPhrases.length);
+    lastIndex = initIdx;
+    phraseEl.textContent = workingPhrases[initIdx];
+  }
+
+  // Cycle every 3.5 seconds
+  workingPhraseInterval = setInterval(cyclePhrases, 3500);
+}
+
+function hideWorkingDialog() {
+  var overlay = document.getElementById("working-overlay");
+  if (overlay) overlay.style.display = "none";
+  if (workingPhraseInterval) {
+    clearInterval(workingPhraseInterval);
+    workingPhraseInterval = null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // New Feature Dialog
 // ---------------------------------------------------------------------------
 
@@ -2020,6 +2173,8 @@ function submitToAssistant() {
   if (assistBtn) { assistBtn.disabled = true; assistBtn.textContent = "Working…"; }
   if (errorEl) errorEl.style.display = "none";
 
+  showWorkingDialog();
+
   signedFetch("/api/features/assist", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2053,6 +2208,7 @@ function submitToAssistant() {
       }
     })
     .finally(function () {
+      hideWorkingDialog();
       if (saveBtn) saveBtn.disabled = false;
       if (holdBtn) holdBtn.disabled = false;
       if (assistBtn) { assistBtn.disabled = false; assistBtn.textContent = "Submit to Assistant"; }

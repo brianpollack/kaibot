@@ -151,3 +151,6 @@ Implemented the "Submit to Assistant" feature for the New Feature dialog:
 March 30th, 2026: main: brian
 Updated both ACE editor instances in `web/static/html/client.js` to use the `ace/theme/tomorrow_night` theme instead of `ace/theme/monokai`. The New Feature description editor (`nfAceEditor`) and Settings file editor (`settingsAceEditor`) now render with the Tomorrow Night dark theme. No other editor options were modified.
 
+March 30th, 2026: main: brian
+Implemented a "Working" modal dialog that displays a full-screen overlay when the user clicks "Submit to Assistant". The overlay includes the existing `thinking64x64.png` image (with a TODO to replace with `robot_working.png`), a CSS-animated spinner, and a randomly cycling phrase from an array of 100 humorous messages that updates every 3.5 seconds with a fade transition. The dialog opens immediately before the `/api/features/assist` API call and closes programmatically when the response arrives (success or error). It sits above all other overlays at z-index 1300 and cannot be dismissed by clicking outside. Files changed: `web/static/css/main.css`, `src/web/templates.ts`, `web/static/html/client.js`.
+
