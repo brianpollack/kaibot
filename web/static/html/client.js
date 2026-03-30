@@ -1942,6 +1942,7 @@ function submitNewFeature(hold) {
   var errorEl = document.getElementById("nf-error");
   var saveBtn = document.getElementById("nf-save");
   var holdBtn = document.getElementById("nf-hold");
+  var assistBtn = document.getElementById("nf-assist");
 
   var title = titleInput ? titleInput.value.trim() : "";
   var description = nfAceEditor ? nfAceEditor.getValue().trim() : "";
@@ -1958,6 +1959,7 @@ function submitNewFeature(hold) {
   // Disable buttons during submission
   if (saveBtn) saveBtn.disabled = true;
   if (holdBtn) holdBtn.disabled = true;
+  if (assistBtn) assistBtn.disabled = true;
   if (errorEl) errorEl.style.display = "none";
 
   signedFetch("/api/features", {
@@ -1989,6 +1991,71 @@ function submitNewFeature(hold) {
     .finally(function () {
       if (saveBtn) saveBtn.disabled = false;
       if (holdBtn) holdBtn.disabled = false;
+      if (assistBtn) assistBtn.disabled = false;
+    });
+}
+
+function submitToAssistant() {
+  var titleInput = document.getElementById("nf-title");
+  var errorEl = document.getElementById("nf-error");
+  var saveBtn = document.getElementById("nf-save");
+  var holdBtn = document.getElementById("nf-hold");
+  var assistBtn = document.getElementById("nf-assist");
+
+  var title = titleInput ? titleInput.value.trim() : "";
+  var description = nfAceEditor ? nfAceEditor.getValue().trim() : "";
+
+  if (!title) {
+    if (errorEl) {
+      errorEl.textContent = "Title is required.";
+      errorEl.style.display = "";
+    }
+    if (titleInput) titleInput.focus();
+    return;
+  }
+
+  // Disable all buttons during submission
+  if (saveBtn) saveBtn.disabled = true;
+  if (holdBtn) holdBtn.disabled = true;
+  if (assistBtn) { assistBtn.disabled = true; assistBtn.textContent = "Working…"; }
+  if (errorEl) errorEl.style.display = "none";
+
+  signedFetch("/api/features/assist", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: title, description: description }),
+  })
+    .then(function (res) {
+      if (!res.ok) {
+        return res.json().then(function (data) {
+          throw new Error(data.error || "Failed to get assistant response");
+        });
+      }
+      return res.json();
+    })
+    .then(function (data) {
+      // Update the title and description fields with the assistant's response
+      if (data.title && titleInput) {
+        titleInput.value = data.title;
+      }
+      if (data.description && nfAceEditor) {
+        nfAceEditor.setValue(data.description, -1);
+      }
+      if (data.clarify && errorEl) {
+        errorEl.textContent = "Assistant needs clarification: " + data.clarify;
+        errorEl.style.display = "";
+      }
+    })
+    .catch(function (err) {
+      if (errorEl) {
+        errorEl.textContent = err.message || "Failed to get assistant response";
+        errorEl.style.display = "";
+      }
+    })
+    .finally(function () {
+      if (saveBtn) saveBtn.disabled = false;
+      if (holdBtn) holdBtn.disabled = false;
+      if (assistBtn) { assistBtn.disabled = false; assistBtn.textContent = "Submit to Assistant"; }
     });
 }
 
@@ -2494,10 +2561,16 @@ document.addEventListener("click", function (e) {
     submitNewFeature(false);
   }
 
-  // New Feature dialog — Hold button
+  // New Feature dialog — Hold (Save to Backlog) button
   var nfHold = document.getElementById("nf-hold");
   if (nfHold && nfHold.contains(e.target)) {
     submitNewFeature(true);
+  }
+
+  // New Feature dialog — Submit to Assistant button
+  var nfAssist = document.getElementById("nf-assist");
+  if (nfAssist && nfAssist.contains(e.target)) {
+    submitToAssistant();
   }
 
 

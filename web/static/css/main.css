@@ -701,7 +701,7 @@ ul {
   position: relative;
   background: #b8cce0;
   color: #1a1a2a;
-  border-radius: 18px 18px 4px 18px;
+  border-radius: 18px 18px 0 18px;
   padding: 9px 14px;
   font-size: 13px;
   line-height: 1.55;

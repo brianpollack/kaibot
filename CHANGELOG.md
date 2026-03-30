@@ -145,3 +145,6 @@ Replaced the 🤖 emoji placeholder logo with the actual KaiBot logo image throu
 March 30th, 2026: main: brian
 Improved the thinking block display in the web conversation view:
 
+March 30th, 2026: main: brian
+Implemented the "Submit to Assistant" feature for the New Feature dialog:
+

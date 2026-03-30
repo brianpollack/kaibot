@@ -240,8 +240,14 @@ export function routeToolUse(name: string, input: Record<string, unknown> | unde
     uiStore.pushCommand(`Agent(${subagentType}): ${description}`);
     // Rich agent block for the web conversation feed
     uiStore.pushConversationAgent(subagentType, description, prompt);
+  } else if (name === "Grep") {
+    const pattern = typeof input?.pattern === "string" ? input.pattern : "(unknown)";
+    const grepPath = typeof input?.path === "string" ? basename(input.path) : ".";
+    const label = `Grepping for ${pattern} in ${grepPath}`;
+    uiStore.pushCommand(label);
+    uiStore.pushConversationCommand(label);
   } else {
-    // Other tools (Glob, Grep, etc.) — truncate only for the narrow InkJS panel
+    // Other tools (Glob, etc.) — truncate only for the narrow InkJS panel
     const inputStr = JSON.stringify(input);
     const inkLabel = `${name}: ${inputStr.length > 60 ? `${inputStr.slice(0, 60)}…` : inputStr}`;
     const fullLabel = `${name}: ${inputStr}`;

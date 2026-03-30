@@ -669,7 +669,8 @@ export function renderMainPage(server: WebServer): string {
         <div id="nf-error" class="dialog-error" style="display:none"></div>
       </div>
       <div class="dialog-footer">
-        <button class="dialog-btn dialog-btn-secondary" id="nf-hold">Hold</button>
+        <button class="dialog-btn dialog-btn-secondary" id="nf-hold">Save to Backlog</button>
+        <button class="dialog-btn dialog-btn-primary" id="nf-assist">Submit to Assistant</button>
         <button class="dialog-btn dialog-btn-primary" id="nf-save">Save</button>
       </div>
     </div>

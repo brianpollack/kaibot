@@ -20,6 +20,7 @@ import { generateFeatureId } from "../feature.js";
 import { loadPathHistory, addToPathHistory } from "../pathHistory.js";
 import { loadProjectEnv } from "../env.js";
 import { loadCodeAssistOptions, loadPromptContent, runCodeAssist } from "../codeAssist.js";
+import { KaiClient } from "../KaiClient.js";
 import { todoExists, loadTodoItems, runTodoPlan } from "../todoAssist.js";
 
 // ---------------------------------------------------------------------------
@@ -602,6 +603,50 @@ export function handleRequest(
     return;
   }
 
+  // ── API: feature assist — refine title/description via AI ─────────
+  if (pathname === "/api/features/assist" && req.method === "POST") {
+    readBody(req)
+      .then(async (body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        if (!requireProject(server, res)) return;
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const title = String(data["title"] ?? "").trim();
+        const description = String(data["description"] ?? "").trim();
+
+        if (!title) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: "Title is required" }));
+          return;
+        }
+
+        // Load prompt template and replace markers
+        const promptTemplate = loadPromptContent("feature_assist.md");
+        const prompt = promptTemplate
+          .replace(/\{featureName\}/g, title)
+          .replace(/\{details\}/g, description || "(no details provided)");
+
+        const model = uiStore.getState().model || "claude-opus-4-6";
+        const client = KaiClient.create(server.projectDir!, model);
+        const response = await client.run(prompt);
+
+        // Parse the response — expect FEATURE TITLE: and DESCRIPTION: sections
+        const parsed = parseFeatureAssistResponse(response);
+
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify(parsed));
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        try {
+          res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: msg }));
+        } catch {
+          // Response may already be sent
+        }
+      });
+    return;
+  }
+
   // ── API: create new feature ───────────────────────────────────────
   if (pathname === "/api/features" && req.method === "POST") {
     readBody(req)
@@ -874,6 +919,46 @@ function resolveSettingsFilePath(key: string, projectDir: string): string | null
   const resolver = SETTINGS_FILE_KEYS[key];
   if (!resolver) return null;
   return resolver(projectDir);
+}
+
+// ---------------------------------------------------------------------------
+// Feature assist response parser
+// ---------------------------------------------------------------------------
+
+/**
+ * Parses the AI response from the feature_assist.md prompt.
+ * Expects sections: FEATURE TITLE:, DESCRIPTION:, and optionally CLARIFY.
+ */
+function parseFeatureAssistResponse(response: string): {
+  title: string;
+  description: string;
+  clarify?: string;
+} {
+  const trimmed = response.trim();
+
+  let title = "";
+  let description = "";
+  let clarify: string | undefined;
+
+  // Extract FEATURE TITLE:
+  const titleMatch = trimmed.match(/FEATURE TITLE:\s*\n([\s\S]*?)(?=\nDESCRIPTION:|\n*$)/i);
+  if (titleMatch) {
+    title = titleMatch[1].trim();
+  }
+
+  // Extract DESCRIPTION:
+  const descMatch = trimmed.match(/DESCRIPTION:\s*\n([\s\S]*?)(?=\nCLARIFY\b|$)/i);
+  if (descMatch) {
+    description = descMatch[1].trim();
+  }
+
+  // Extract optional CLARIFY section
+  const clarifyMatch = trimmed.match(/CLARIFY\s*\n([\s\S]*?)$/i);
+  if (clarifyMatch) {
+    clarify = clarifyMatch[1].trim();
+  }
+
+  return { title, description, ...(clarify ? { clarify } : {}) };
 }
 
 // ---------------------------------------------------------------------------
