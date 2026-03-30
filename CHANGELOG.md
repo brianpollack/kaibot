@@ -148,3 +148,6 @@ Improved the thinking block display in the web conversation view:
 March 30th, 2026: main: brian
 Implemented the "Submit to Assistant" feature for the New Feature dialog:
 
+March 30th, 2026: main: brian
+Updated both ACE editor instances in `web/static/html/client.js` to use the `ace/theme/tomorrow_night` theme instead of `ace/theme/monokai`. The New Feature description editor (`nfAceEditor`) and Settings file editor (`settingsAceEditor`) now render with the Tomorrow Night dark theme. No other editor options were modified.
+

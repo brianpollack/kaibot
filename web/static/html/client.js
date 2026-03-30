@@ -1419,7 +1419,7 @@ function initNFEditor() {
   if (nfAceEditor) return;
   if (typeof ace === "undefined") return;
   nfAceEditor = ace.edit("nf-description-editor");
-  nfAceEditor.setTheme("ace/theme/monokai");
+  nfAceEditor.setTheme("ace/theme/tomorrow_night");
   nfAceEditor.session.setMode("ace/mode/markdown");
   nfAceEditor.setOptions({
     fontSize: "13px",
@@ -1433,7 +1433,7 @@ function initSettingsEditor() {
   if (settingsAceEditor) return;
   if (typeof ace === "undefined") return;
   settingsAceEditor = ace.edit("settings-editor");
-  settingsAceEditor.setTheme("ace/theme/monokai");
+  settingsAceEditor.setTheme("ace/theme/tomorrow_night");
   settingsAceEditor.session.setMode("ace/mode/markdown");
   settingsAceEditor.setOptions({
     fontSize: "13px",
