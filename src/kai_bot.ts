@@ -1,4 +1,4 @@
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { createInterface } from "readline";
 import { join, resolve } from "path";
@@ -13,6 +13,7 @@ import { addToPathHistory } from "./pathHistory.js";
 import { mountUI, unmountUI } from "./ui/render.js";
 import { uiStore } from "./ui/store.js";
 import { WebServer } from "./web/WebServer.js";
+import { getKaiBotVersion, getKaiBotRoot } from "./version.js";
 
 // ---------------------------------------------------------------------------
 // Subcommands
@@ -128,6 +129,17 @@ function startBotWithProject(
 
   if (ink) {
     mountUI();
+  }
+
+  // Load welcome screen content
+  const kaibotVersion = getKaiBotVersion();
+  uiStore.setKaibotVersion(kaibotVersion);
+  try {
+    const welcomePath = join(getKaiBotRoot(), "WELCOME.md");
+    const welcomeText = readFileSync(welcomePath, "utf-8");
+    uiStore.setWelcomeText(welcomeText);
+  } catch {
+    // WELCOME.md missing — leave blank
   }
 
   // Keep webServer model in sync with UI model changes; persist to settings file
@@ -297,6 +309,8 @@ else {
   await webServer.start();
   console.error(`KaiBot waiting for project selection at ${webServer.url}`);
 
+  let currentBot: KaiBot | null = null;
+
   // When a project is selected via the web UI, start the bot
   webServer.on("project-activated", (resolvedDir: string) => {
     addToPathHistory(resolvedDir);
@@ -310,11 +324,29 @@ else {
 
     webServer.model = model;
 
-    startBotWithProject(resolvedDir, model, provider, webServer, false);
+    currentBot = startBotWithProject(resolvedDir, model, provider, webServer, false);
+  });
+
+  // When a project is deselected via the web UI, stop the bot and reset state
+  webServer.on("project-deactivated", () => {
+    if (currentBot) {
+      currentBot.stop();
+      currentBot = null;
+    }
+    // Remove listeners added by startBotWithProject to prevent accumulation
+    uiStore.removeAllListeners("model-changed");
+    uiStore.removeAllListeners("provider-changed");
+    uiStore.removeAllListeners("quit");
+
+    uiStore.resetFeature();
+    uiStore.setStatus("idle");
+    uiStore.setProjectDir("");
+    uiStore.startConversation();
   });
 
   // Graceful shutdown while waiting
   const shutdown = () => {
+    if (currentBot) currentBot.stop();
     webServer.stop().finally(() => process.exit(0));
   };
   process.on("SIGINT", shutdown);

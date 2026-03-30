@@ -130,3 +130,12 @@ Added a cost column to the features history list in the web UI. The `CompleteFea
 March 25th, 2026: main: brian
 Added Ctrl+S (Cmd+S on Mac) as a keyboard shortcut to save the current file in the settings editor, both at the document level and as an Ace editor command binding. Removed the floppy disk icon from the Save button in the settings toolbar. Disabled the print margin line in the Ace editor by setting `showPrintMargin: false`.
 
+March 30th, 2026: main: brian
+Added a welcome screen that displays when KaiBot is watching for features and no feature is currently being processed. The welcome screen shows the content of `WELCOME.md` (a new file with a usage guide, how-it-works steps, and hotkey reference table) along with a version banner: "You are running KaiBot v0.9.0 in /path/to/project".
+
+March 30th, 2026: main: brian
+Unified the conversation rendering across the KaiBot Web UI into a single modular `ConversationBlockRenderer` object in client.js. Each conversation block type (thinking, command, agent, git, system, user, file) is now rendered by a dedicated method on the renderer, accepting a `mode` parameter ("live" or "history") to handle minor visual differences like timestamps. Both the live dashboard conversation feed and the feature-detail history dialog now share the same rendering code, eliminating ~80 lines of duplicated rendering logic.
+
+March 30th, 2026: main: brian
+Implemented clickable "Project" label in the top status bar that returns the user to the project selection screen. Changes span the full stack:
+

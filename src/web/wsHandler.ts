@@ -6,7 +6,7 @@ import { uiStore, type ConversationItem, type UIState } from "../ui/store.js";
 import { getTodaySpend } from "./spendTracker.js";
 import type { NpmCommandRunner } from "./NpmCommandRunner.js";
 import type { WebServer } from "./WebServer.js";
-import { closeSession, hasSession, sendFollowup } from "./followupSession.js";
+import { closeSession, hasSession, resumeSession, sendFollowup } from "./followupSession.js";
 import { verifyWsHmac } from "./hmac.js";
 
 // ---------------------------------------------------------------------------
@@ -33,6 +33,8 @@ export interface WebUIState {
   followupFeatureId: string | null;
   codeAssistActive: boolean;
   codeAssistResult: { action: string; path: string } | null;
+  welcomeText: string;
+  kaibotVersion: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +68,8 @@ export function getWebState(): WebUIState {
     followupFeatureId: s.followupFeatureId,
     codeAssistActive: s.codeAssistActive,
     codeAssistResult: s.codeAssistResult,
+    welcomeText: s.welcomeText,
+    kaibotVersion: s.kaibotVersion,
   };
 }
 
@@ -213,6 +217,23 @@ export function setupWebSocketHandler(
         }
         if (msg.type === "feature-close" && typeof msg.featureId === "string") {
           closeSession(msg.featureId);
+        }
+        if (
+          msg.type === "feature-resume" &&
+          typeof msg.featureId === "string" &&
+          typeof msg.sessionId === "string" &&
+          typeof msg.message === "string" &&
+          server.projectDir
+        ) {
+          const s = uiStore.getState();
+          resumeSession(
+            msg.featureId,
+            msg.sessionId,
+            msg.message,
+            server.projectDir,
+            s.model,
+            s.provider as "anthropic" | "openrouter",
+          ).catch(() => {});
         }
       } catch {
         // Ignore malformed messages

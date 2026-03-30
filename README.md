@@ -61,3 +61,8 @@ npx vitest run src/__tests__/feature.test.ts
 ```
 
 
+## Update latest
+See [Claude COde SDK](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md)
+```bash
+npm run latest
+```

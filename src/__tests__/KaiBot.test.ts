@@ -21,6 +21,13 @@ vi.mock("../featureDb.js", () => ({
   appendFeatureRecord: vi.fn(),
 }));
 
+vi.mock("../web/followupSession.js", () => ({
+  registerSession: vi.fn((_featureId: string, _client: unknown, _logPath: string, onClose: () => void) => {
+    onClose();
+  }),
+  closeSession: vi.fn(),
+}));
+
 import { KaiBot } from "../KaiBot.js";
 import { type AgentStats, processFeature } from "../KaiAgent.js";
 import { uiStore } from "../ui/store.js";

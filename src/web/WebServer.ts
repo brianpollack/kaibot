@@ -107,6 +107,29 @@ export class WebServer extends EventEmitter {
     this.emit("project-activated", projectDir);
   }
 
+  /**
+   * Transition from "active" back to "waiting" state.
+   * Stops the NpmCommandRunner and notifies all WebSocket clients to reload
+   * (which will serve the project selection page).
+   */
+  deactivateProject(): void {
+    if (this.npmRunner) {
+      this.npmRunner.stopAll();
+      this.npmRunner = null;
+    }
+    this.projectDir = null;
+    this.state = "waiting";
+
+    // Notify WebSocket clients to reload — they'll get the project selection page
+    for (const client of this.wss.clients) {
+      if (client.readyState === 1 /* OPEN */) {
+        client.send(JSON.stringify({ type: "project-deactivated" }));
+      }
+    }
+
+    this.emit("project-deactivated");
+  }
+
   /** Broadcast a message to all connected WebSocket clients. */
   private broadcast(msg: object): void {
     const payload = JSON.stringify(msg);

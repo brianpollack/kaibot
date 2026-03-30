@@ -157,6 +157,25 @@ export function handleRequest(
     return;
   }
 
+  // ── Deselect project API — transitions server from active to waiting ─
+  if (pathname === "/api/deselect-project" && req.method === "POST") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (server.state === "waiting") {
+      res.writeHead(409, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "No project is currently selected" }));
+      return;
+    }
+    if (uiStore.getState().status === "processing") {
+      res.writeHead(409, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Cannot deselect while a feature is being processed" }));
+      return;
+    }
+    server.deactivateProject();
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
   // ── Select project API — transitions server from waiting to active ─
   if (pathname === "/api/select-project" && req.method === "POST") {
     if (server.state === "active") {

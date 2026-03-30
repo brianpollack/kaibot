@@ -95,6 +95,8 @@ let state = {
   statusMessage: "Connecting…",
   todaySpend: 0,
   followupFeatureId: null,
+  welcomeText: "",
+  kaibotVersion: "",
 };
 
 // ---------------------------------------------------------------------------
@@ -158,105 +160,193 @@ function renderThinkingContent(text) {
 }
 
 // ---------------------------------------------------------------------------
+// Unified ConversationBlockRenderer — modular, DRY renderers for each block type.
+// Both the live conversation feed and the feature-detail history dialog use
+// these same methods.  A `mode` string ("live" | "history") controls minor
+// visual differences (timestamps in history, active indicators in live).
+// ---------------------------------------------------------------------------
+
+var ConversationBlockRenderer = {
+
+  /** Render a single conversation item.  Delegates to a type-specific method. */
+  render: function (item, mode) {
+    var renderer = this["_" + (item.type || "unknown")];
+    if (renderer) return renderer.call(this, item, mode);
+    return "";
+  },
+
+  /** Wrap content with an optional timestamp header for history mode. */
+  _wrapBlock: function (item, mode, innerHtml) {
+    if (mode !== "history") return innerHtml;
+    var ts = this._fmtTime(item.timestamp);
+    if (!ts) return innerHtml;
+    return '<div class="conv-block-ts">' + escHtml(ts) + '</div>' + innerHtml;
+  },
+
+  _fmtTime: function (ts) {
+    if (!ts) return "";
+    try {
+      var dt = new Date(ts);
+      return dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    } catch (e) { return ""; }
+  },
+
+  // -- Thinking block -------------------------------------------------------
+  _thinking: function (item, mode) {
+    var html = '<div class="conv-thinking">' + renderThinkingContent(String(item.content || "")) + "</div>";
+    return this._wrapBlock(item, mode, html);
+  },
+
+  // -- Command block --------------------------------------------------------
+  _command: function (item, mode) {
+    var isActive = mode === "live" && item.active;
+    var cls = "conv-command" + (isActive ? " active" : "");
+    var html =
+      '<div class="' + cls + '">' +
+        '<div class="conv-command-header">' +
+          '<span>' + (isActive ? "\u25B6" : "$") + "</span>" +
+          (isActive ? '<span class="conv-command-running">running\u2026</span>' : "") +
+        "</div>" +
+        '<pre class="conv-command-code">' + escHtml(String(item.content || "")) + "</pre>" +
+      "</div>";
+    return this._wrapBlock(item, mode, html);
+  },
+
+  // -- Agent tool-use block -------------------------------------------------
+  _agent: function (item, mode) {
+    var agentType = item.agentType || "Agent";
+    var agentDesc = item.agentDescription || "";
+    var html =
+      '<div class="conv-agent">' +
+        '<div class="conv-agent-header">' +
+          '<img class="conv-agent-favicon" src="https://claude.ai/favicon.ico"' +
+            ' alt="Claude" onerror="this.style.display=\'none\'">' +
+          '<span class="conv-agent-type">' + escHtml(agentType) + "</span>" +
+          (agentDesc
+            ? '<span class="conv-agent-sep"> \u2014 </span>' +
+              '<span class="conv-agent-desc">' + escHtml(agentDesc) + "</span>"
+            : "") +
+        "</div>" +
+        '<pre class="conv-agent-prompt">' + escHtml(String(item.content || "")) + "</pre>" +
+      "</div>";
+    return this._wrapBlock(item, mode, html);
+  },
+
+  // -- Git commit block -----------------------------------------------------
+  _git: function (item, mode) {
+    var html =
+      '<div class="conv-git">' +
+        '<div class="conv-git-header">&#x1F4BE; git commit</div>' +
+        '<pre class="conv-git-message">' + escHtml(String(item.content || "")) + "</pre>" +
+      "</div>";
+    return this._wrapBlock(item, mode, html);
+  },
+
+  // -- System message -------------------------------------------------------
+  _system: function (item, mode) {
+    var html = '<div class="conv-system">' + escHtml(String(item.content || "")) + "</div>";
+    return this._wrapBlock(item, mode, html);
+  },
+
+  // -- User follow-up message -----------------------------------------------
+  _user: function (item, mode) {
+    var html =
+      '<div class="conv-user-row">' +
+        '<div class="conv-user-bubble">' + escHtml(String(item.content || "")) + '</div>' +
+      '</div>';
+    return this._wrapBlock(item, mode, html);
+  },
+
+  // -- File operation block -------------------------------------------------
+  _file: function (item, mode) {
+    var fd = {};
+    try { fd = JSON.parse(String(item.content || "{}")); } catch (e) {}
+    var fTool = (fd.tool || "file").toLowerCase();
+    var fPath = fd.path || "";
+    var inner = '<div class="conv-file-header">' +
+      '<span class="conv-file-op ' + escHtml(fTool) + '">' + escHtml(fd.tool || "File") + '</span>' +
+      '<span class="conv-file-path">' + escHtml(fPath) + '</span>' +
+      '</div>';
+    var hasBody = fd.old || fd.new || fd.preview;
+    if (hasBody) {
+      inner += '<div class="conv-file-body">';
+      if (fd.old) {
+        inner += '<div class="conv-file-section-label">replaced</div>' +
+          '<div class="conv-file-snippet old">' + escHtml(fd.old) + '</div>';
+      }
+      if (fd.new) {
+        inner += '<div class="conv-file-section-label">with</div>' +
+          '<div class="conv-file-snippet new">' + escHtml(fd.new) + '</div>';
+      }
+      if (fd.preview) {
+        inner += '<div class="conv-file-section-label">' + (fd.lines ? fd.lines + ' lines' : 'content') + '</div>' +
+          '<div class="conv-file-snippet content">' + escHtml(fd.preview) + '</div>';
+      }
+      inner += '</div>';
+    }
+    var html = '<div class="conv-file">' + inner + '</div>';
+    return this._wrapBlock(item, mode, html);
+  },
+
+  // -- Render a full list of items ------------------------------------------
+  renderAll: function (items, mode) {
+    var self = this;
+    return items.map(function (item) {
+      return self.render(item, mode);
+    }).join("");
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Conversation feed renderer
 // ---------------------------------------------------------------------------
+
+function renderWelcomeContent() {
+  if (!state.welcomeText) return "";
+  var lines = state.welcomeText.split("\n");
+  var html = '<div class="welcome-screen">';
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (line.startsWith("# ")) {
+      html += '<h1 class="welcome-h1">' + escHtml(line.slice(2)) + "</h1>";
+    } else if (line.startsWith("## ")) {
+      html += '<h2 class="welcome-h2">' + escHtml(line.slice(3)) + "</h2>";
+    } else if (/^\|[\s-|]+\|$/.test(line)) {
+      // Skip table separator rows (rendered as part of the table)
+      continue;
+    } else if (line.startsWith("|")) {
+      // Table row — simple rendering
+      var cells = line.split("|").filter(function (c) { return c.trim(); });
+      html += '<div class="welcome-table-row">';
+      for (var j = 0; j < cells.length; j++) {
+        html += '<span class="welcome-table-cell">' + escHtml(cells[j].trim()) + "</span>";
+      }
+      html += "</div>";
+    } else if (/^\d+\./.test(line.trim())) {
+      html += '<div class="welcome-step">' + escHtml(line.trim()) + "</div>";
+    } else if (line.trim() === "") {
+      html += "<br>";
+    } else {
+      html += '<p class="welcome-text">' + escHtml(line) + "</p>";
+    }
+  }
+  html += '<div class="welcome-version">You are running KaiBot v' +
+    escHtml(state.kaibotVersion) + " in " + escHtml(state.projectDir) + "</div>";
+  html += "</div>";
+  return html;
+}
 
 function renderConversationContent() {
   var items = state.conversationItems || [];
   if (items.length === 0) {
-    return '<div class="empty-state">(waiting for feature processing…)</div>';
+    // Show welcome screen when idle / watching
+    if (state.welcomeText && (state.status === "watching" || state.status === "idle") && !state.featureName) {
+      return renderWelcomeContent();
+    }
+    return '<div class="empty-state">(waiting for feature processing\u2026)</div>';
   }
 
-  return items.map(function (item) {
-    switch (item.type) {
-
-      case "thinking": {
-        return '<div class="conv-thinking">' + renderThinkingContent(item.content) + "</div>";
-      }
-
-      case "command": {
-        var cls = "conv-command" + (item.active ? " active" : "");
-        return (
-          '<div class="' + cls + '">' +
-            '<div class="conv-command-header">' +
-              '<span>' + (item.active ? "▶" : "$") + "</span>" +
-              (item.active ? '<span class="conv-command-running">running…</span>' : "") +
-            "</div>" +
-            '<pre class="conv-command-code">' + escHtml(item.content) + "</pre>" +
-          "</div>"
-        );
-      }
-
-      case "agent": {
-        var agentType = item.agentType || "Agent";
-        var agentDesc = item.agentDescription || "";
-        return (
-          '<div class="conv-agent">' +
-            '<div class="conv-agent-header">' +
-              '<img class="conv-agent-favicon" src="https://claude.ai/favicon.ico"' +
-                ' alt="Claude" onerror="this.style.display=\'none\'">' +
-              '<span class="conv-agent-type">' + escHtml(agentType) + "</span>" +
-              (agentDesc
-                ? '<span class="conv-agent-sep"> — </span>' +
-                  '<span class="conv-agent-desc">' + escHtml(agentDesc) + "</span>"
-                : "") +
-            "</div>" +
-            '<pre class="conv-agent-prompt">' + escHtml(item.content) + "</pre>" +
-          "</div>"
-        );
-      }
-
-      case "git":
-        return (
-          '<div class="conv-git">' +
-            '<div class="conv-git-header">&#x1F4BE; git commit</div>' +
-            '<pre class="conv-git-message">' + escHtml(item.content) + "</pre>" +
-          "</div>"
-        );
-
-      case "system":
-        return '<div class="conv-system">' + escHtml(item.content) + "</div>";
-
-      case "user":
-        return (
-          '<div class="conv-user-row">' +
-            '<div class="conv-user-bubble">' + escHtml(item.content) + '</div>' +
-          '</div>'
-        );
-
-      case "file": {
-        var fd = {};
-        try { fd = JSON.parse(item.content); } catch (e) {}
-        var fTool = (fd.tool || "file").toLowerCase();
-        var fPath = fd.path || "";
-        var inner = '<div class="conv-file-header">' +
-          '<span class="conv-file-op ' + escHtml(fTool) + '">' + escHtml(fd.tool || "File") + '</span>' +
-          '<span class="conv-file-path">' + escHtml(fPath) + '</span>' +
-          '</div>';
-        var hasBody = fd.old || fd.new || fd.preview;
-        if (hasBody) {
-          inner += '<div class="conv-file-body">';
-          if (fd.old) {
-            inner += '<div class="conv-file-section-label">replaced</div>' +
-              '<div class="conv-file-snippet old">' + escHtml(fd.old) + '</div>';
-          }
-          if (fd.new) {
-            inner += '<div class="conv-file-section-label">with</div>' +
-              '<div class="conv-file-snippet new">' + escHtml(fd.new) + '</div>';
-          }
-          if (fd.preview) {
-            inner += '<div class="conv-file-section-label">' + (fd.lines ? fd.lines + ' lines' : 'content') + '</div>' +
-              '<div class="conv-file-snippet content">' + escHtml(fd.preview) + '</div>';
-          }
-          inner += '</div>';
-        }
-        return '<div class="conv-file">' + inner + '</div>';
-      }
-
-      default:
-        return "";
-    }
-  }).join("");
+  return ConversationBlockRenderer.renderAll(items, "live");
 }
 
 // ---------------------------------------------------------------------------
@@ -428,6 +518,15 @@ function updateDOM() {
     $botStatus.className = "badge badge-" + state.status;
   }
   if ($projectDir) $projectDir.textContent = state.projectDir;
+  var $projectTrigger = document.getElementById("project-trigger");
+  if ($projectTrigger) {
+    var isProcessing = state.status === "processing";
+    $projectTrigger.classList.toggle("disabled", isProcessing);
+    $projectTrigger.setAttribute("aria-disabled", isProcessing ? "true" : "false");
+    $projectTrigger.title = isProcessing
+      ? "Cannot change project while processing"
+      : "Click to return to project selection";
+  }
   if ($currentModel) $currentModel.textContent = state.model;
   var $currentProvider = document.getElementById("current-provider");
   if ($currentProvider) $currentProvider.textContent = state.provider === "openrouter" ? "OpenRouter" : "Anthropic";
@@ -595,6 +694,9 @@ function connectWebSocket() {
         loadNpmScripts();
       } else if (msg.type === "todo-updated" || msg.type === "project-activated") {
         loadTodoNavItem();
+      } else if (msg.type === "project-deactivated") {
+        // Server has returned to "waiting" state — reload to show project selection
+        window.location.reload();
       }
     } catch (e) {
       // Ignore malformed messages
@@ -792,6 +894,24 @@ document.addEventListener("keydown", function (e) {
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// Project Deselection
+// ---------------------------------------------------------------------------
+
+function deselectProject() {
+  // Block navigation while the agent is processing
+  if (state.status === "processing") return;
+
+  signedFetch("/api/deselect-project", { method: "POST" })
+    .then(function (res) {
+      if (!res.ok) return res.json().then(function (d) { throw new Error(d.error); });
+      // Server will broadcast project-deactivated via WS, triggering a reload
+    })
+    .catch(function (err) {
+      console.error("Failed to deselect project:", err);
+    });
+}
 
 // ---------------------------------------------------------------------------
 // Model Selector
@@ -1607,79 +1727,25 @@ function renderFdConversation(d) {
     return '<div class="empty-state">(no conversation recorded)</div>';
   }
 
-  function fmtTime(ts) {
-    if (!ts) return "";
-    try {
-      var dt = new Date(ts);
-      return dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    } catch (e) { return ""; }
+  var html = '<div class="fd-conv-list">' +
+    ConversationBlockRenderer.renderAll(items, "history") +
+    '</div>';
+
+  // Follow-up input area for resuming the session from history
+  if (d.sessionId) {
+    html += '<div class="fd-followup-area" data-session-id="' + escHtml(d.sessionId) + '"' +
+      ' data-feature-id="' + escHtml(d.id || "") + '">' +
+      '<div class="fd-followup-inner">' +
+        '<textarea class="fd-followup-textarea" rows="3"' +
+          ' placeholder="Resume conversation\u2026 (Ctrl+Enter to send)"></textarea>' +
+        '<div class="fd-followup-buttons">' +
+          '<button class="fd-followup-send" title="Resume session and send (Ctrl+Enter)">Resume &amp; Send</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
   }
 
-  var html = items.map(function (item) {
-    var type = item.type || "assistant";
-
-    // User follow-up messages — render as white chat bubble (same as live panel)
-    if (type === "user") {
-      return '<div class="fd-conv-item">' +
-        '<div class="conv-user-row">' +
-          '<div class="conv-user-bubble">' + escHtml(String(item.content || "")) + '</div>' +
-        '</div>' +
-      '</div>';
-    }
-
-    var label = type;
-    if (type === "agent" && item.agentDescription) {
-      label = "agent";
-    }
-    var header = '<div class="fd-conv-header">' +
-      '<span class="fd-conv-badge ' + escHtml(type) + '">' + escHtml(label) + '</span>';
-    if (type === "agent" && item.agentDescription) {
-      header += '<span class="fd-conv-agent-desc">' + escHtml(item.agentDescription) + '</span>';
-    }
-    if (type === "file") {
-      // Show file path inline in the header
-      var ffd = {};
-      try { ffd = JSON.parse(item.content || "{}"); } catch (e) {}
-      if (ffd.path) {
-        header += '<span class="fd-conv-badge ' + escHtml((ffd.tool || "file").toLowerCase()) + '" style="font-weight:400;text-transform:none;letter-spacing:0">' +
-          escHtml(ffd.tool || "file") + '</span>';
-        header += '<span class="fd-conv-file-path">' + escHtml(ffd.path) + '</span>';
-      }
-    }
-    header += '<span class="fd-conv-time">' + escHtml(fmtTime(item.timestamp)) + '</span>';
-    header += '</div>';
-
-    var content;
-    if (type === "file") {
-      var ffd2 = {};
-      try { ffd2 = JSON.parse(item.content || "{}"); } catch (e) {}
-      content = '<div class="fd-conv-content file" style="padding:0">';
-      if (ffd2.old) {
-        content += '<div style="padding:3px 10px 1px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6B7280">replaced</div>';
-        content += '<div class="fd-conv-file-snippet old">' + escHtml(ffd2.old) + '</div>';
-      }
-      if (ffd2.new) {
-        content += '<div style="padding:3px 10px 1px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6B7280">with</div>';
-        content += '<div class="fd-conv-file-snippet new">' + escHtml(ffd2.new) + '</div>';
-      }
-      if (ffd2.preview) {
-        content += '<div style="padding:3px 10px 1px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#6B7280">' +
-          (ffd2.lines ? ffd2.lines + ' lines' : 'content') + '</div>';
-        content += '<div class="fd-conv-file-snippet content">' + escHtml(ffd2.preview) + '</div>';
-      }
-      if (!ffd2.old && !ffd2.new && !ffd2.preview) {
-        content += '<div style="padding:6px 10px;color:#6B7280;font-size:11px">(no preview)</div>';
-      }
-      content += '</div>';
-    } else if (type === "thinking") {
-      content = '<div class="fd-conv-content thinking">' + renderThinkingContent(String(item.content || "")) + '</div>';
-    } else {
-      content = '<div class="fd-conv-content ' + escHtml(type) + '">' + escHtml(String(item.content || "")) + '</div>';
-    }
-    return '<div class="fd-conv-item">' + header + content + '</div>';
-  }).join("");
-
-  return '<div class="fd-conv-list">' + html + '</div>';
+  return html;
 }
 
 // Matches LSP/protocol debug log lines: "HH:MM:SS.mmm instance_id=... [debug|info|warn]..."
@@ -1780,6 +1846,37 @@ function closeFollowupSession() {
   // Hide the input immediately (server will broadcast state update too)
   var followupArea = document.getElementById("followup-input-area");
   if (followupArea) followupArea.style.display = "none";
+}
+
+// ---------------------------------------------------------------------------
+// Feature detail — resume session follow-up
+// ---------------------------------------------------------------------------
+
+function sendFdResumeMessage() {
+  var area = document.querySelector(".fd-followup-area");
+  if (!area) return;
+  var sessionId = area.getAttribute("data-session-id");
+  var featureId = area.getAttribute("data-feature-id");
+  var textarea = area.querySelector(".fd-followup-textarea");
+  if (!textarea || !sessionId || !featureId) return;
+  var message = textarea.value.trim();
+  if (!message) return;
+
+  // Clear input and disable send button while processing
+  textarea.value = "";
+  var sendBtn = area.querySelector(".fd-followup-send");
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = "Sending\u2026";
+  }
+
+  // Send resume request via WebSocket
+  signedWsSend({ type: "feature-resume", featureId: featureId, sessionId: sessionId, message: message })
+    .then(function () {
+      // Close the feature detail dialog and switch to dashboard to see the live conversation
+      closeFeatureDetailDialog();
+      showDashboardView();
+    });
 }
 
 function loadFeaturesData() {
@@ -2221,6 +2318,13 @@ document.addEventListener("keydown", function (e) {
     return;
   }
 
+  // Ctrl+Enter in feature-detail resume textarea — send resume message
+  if (e.target && e.target.classList && e.target.classList.contains("fd-followup-textarea") && e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    sendFdResumeMessage();
+    return;
+  }
+
   // Close feature detail dialog on Escape
   var fdOverlayCheck = document.getElementById("feature-detail-overlay");
   if (fdOverlayCheck && fdOverlayCheck.style.display !== "none" && e.key === "Escape") {
@@ -2305,6 +2409,12 @@ document.addEventListener("click", function (e) {
   if (providerTrigger && providerTrigger.contains(e.target)) {
     e.preventDefault();
     openProviderSelector();
+  }
+
+  var projectTrigger = document.getElementById("project-trigger");
+  if (projectTrigger && projectTrigger.contains(e.target)) {
+    e.preventDefault();
+    deselectProject();
   }
 
   var navDash = document.getElementById("nav-dashboard");
@@ -2437,6 +2547,12 @@ document.addEventListener("click", function (e) {
   if (fdTab) {
     var tab = fdTab.getAttribute("data-tab");
     if (tab) setFeatureDetailTab(tab);
+  }
+
+  // Feature detail — resume send button
+  var fdResumeBtn = e.target.closest ? e.target.closest(".fd-followup-send") : null;
+  if (fdResumeBtn) {
+    sendFdResumeMessage();
   }
 
   // Complete feature items — click to open detail

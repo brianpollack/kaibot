@@ -69,6 +69,7 @@ Follow clean coding principles:
 - avoid deeply nested logic
 - avoid duplicated code
 - keep modules cohesive.
+- Consider DRY concepts whenever possible.
 
 ## Dependencies
 
@@ -105,6 +106,15 @@ The following applies to front end design (UI, Web UI, etc)
 
 - Avoid Animations, Fast, clean, and minimum UI is better with a quick response time as priority
 - Always use Accessible features, aria, and code comments with HTML.  UI should be screen reader compatible
+
+
+## React Specific
+
+- Use small common components instead of large components.  Avoid adding too many things to one component
+  when you can split the code into purpose build components.
+- Use component folders based on category and purpose to avoid too many root folder components
+- Use common CSS elements.  Use SCSS when possible.  Always check for similar component styles such as panels, buttons, and windows before creating new styles
+- Implement full screen reader compatibility and accessibility standards
 
 ## Final Rule
 

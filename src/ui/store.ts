@@ -145,6 +145,11 @@ export interface UIState {
 
   /** Feature ID currently awaiting follow-up prompts from the user, or null. */
   followupFeatureId: string | null;
+
+  /** Welcome screen markdown text (loaded from WELCOME.md on startup). */
+  welcomeText: string;
+  /** KaiBot version string (e.g. "0.9.0"). */
+  kaibotVersion: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +194,8 @@ class UIStore extends EventEmitter {
     codeAssistResult: null,
     statusMessage: "",
     followupFeatureId: null,
+    welcomeText: "",
+    kaibotVersion: "",
   };
 
   getState(): Readonly<UIState> {
@@ -457,11 +464,14 @@ class UIStore extends EventEmitter {
     this.emitChange();
 
     return new Promise<boolean>((resolve) => {
-      this.commitResolve = resolve;
+      let settled = false;
 
-      // Safety net: resolve after 15s even if the UI never calls resolveCommitPrompt
+      // Safety net: resolve after 15s even if the UI never calls resolveCommitPrompt.
+      // In web mode there is no Ink component to drive the countdown, so this is the
+      // only path that will ever fire — auto-commit after 15 seconds.
       const safetyTimer = setTimeout(() => {
-        if (this.commitResolve === resolve) {
+        if (!settled) {
+          settled = true;
           this.commitResolve = null;
           this.state.commitPrompt = { visible: false, message: "", countdown: 0 };
           this.emitChange();
@@ -469,11 +479,12 @@ class UIStore extends EventEmitter {
         }
       }, 15_000);
 
-      // Wrap resolve so the safety timer is always cancelled on normal resolution
-      const originalResolve = this.commitResolve;
       this.commitResolve = (commit: boolean) => {
-        clearTimeout(safetyTimer);
-        originalResolve(commit);
+        if (!settled) {
+          settled = true;
+          clearTimeout(safetyTimer);
+          resolve(commit);
+        }
       };
     });
   }
@@ -623,6 +634,20 @@ class UIStore extends EventEmitter {
   clearCodeAssist(): void {
     this.state.codeAssistActive = false;
     this.state.codeAssistResult = null;
+    this.emitChange();
+  }
+
+  // -- Welcome screen -------------------------------------------------------
+
+  /** Set the welcome text (loaded from WELCOME.md on startup). */
+  setWelcomeText(text: string): void {
+    this.state.welcomeText = text;
+    this.emitChange();
+  }
+
+  /** Set the KaiBot version string. */
+  setKaibotVersion(version: string): void {
+    this.state.kaibotVersion = version;
     this.emitChange();
   }
 

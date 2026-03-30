@@ -15,13 +15,12 @@ import type {
   SDKResultSuccess,
   SDKSystemMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, expect, it } from "vitest";
 
 import { KaiClient } from "../KaiClient.js";
+import { skipIfMissingEnv } from "./helpers/envGuard.js";
 
-const HAS_API_KEY = Boolean(process.env.ANTHROPIC_API_KEY);
-
-describe.skipIf(!HAS_API_KEY)("SDK smoke tests (requires ANTHROPIC_API_KEY)", () => {
+skipIfMissingEnv("ANTHROPIC_API_KEY")("SDK smoke tests (requires ANTHROPIC_API_KEY)", () => {
   const messages: SDKMessage[] = [];
   let tmpDir: string;
 

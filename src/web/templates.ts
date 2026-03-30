@@ -2,6 +2,7 @@ import { basename } from "path";
 
 import type { WebServer } from "./WebServer.js";
 import { getTodaySpend } from "./spendTracker.js";
+import { getKaiBotVersion } from "../version.js";
 
 // ---------------------------------------------------------------------------
 // Project selection page (shown when no project directory is configured)
@@ -418,7 +419,8 @@ export function renderMainPage(server: WebServer): string {
       <span id="bot-status" class="badge badge-idle" role="status" aria-live="polite">IDLE</span>
     </div>
     <div class="status-right">
-      <span class="status-item" title="Current project directory">
+      <span class="status-item project-selector" id="project-trigger"
+            title="Click to return to project selection" role="button" tabindex="0">
         <kbd>Project</kbd>
         <span id="project-dir">${esc(projectPath)}</span>
       </span>
@@ -514,7 +516,7 @@ export function renderMainPage(server: WebServer): string {
       </div>
 
       <div class="nav-footer">
-        <span class="nav-version">v0.1.0</span>
+        <span class="nav-version">v${getKaiBotVersion()}</span>
       </div>
     </nav>
 

@@ -268,9 +268,15 @@ export class KaiClient {
   /**
    * Runs a prompt and returns the raw async message stream.
    * Use this when you need full control over individual messages.
+   *
+   * @param resumeSessionId  Optional session ID to resume a previous conversation.
    */
-  query(prompt: string): Query {
-    return query({ prompt, options: this.buildOptions() });
+  query(prompt: string, resumeSessionId?: string): Query {
+    const opts = this.buildOptions();
+    if (resumeSessionId) {
+      opts.resume = resumeSessionId;
+    }
+    return query({ prompt, options: opts });
   }
 
   /**

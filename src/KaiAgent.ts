@@ -22,6 +22,8 @@ export interface AgentStats {
   cacheWriteTokens: number;
   /** Plan checkbox item labels collected at end of run */
   planPoints: string[];
+  /** SDK session ID — can be used to resume the conversation later. */
+  sessionId?: string;
 }
 
 export interface ProcessFeatureOptions {
@@ -98,13 +100,18 @@ export async function processFeature(
   let hasSeenToolUse = false;
   let hasSeenEdit = false;
   let hasNotifiedPlan = false;
+  let sessionId: string | undefined;
 
   for await (const msg of client.query(prompt)) {
+    // Capture session ID from any message (all SDK messages carry it)
+    if (!sessionId && (msg as Record<string, unknown>).session_id) {
+      sessionId = (msg as Record<string, unknown>).session_id as string;
+    }
     // Stream assistant text and log tool calls
     if (msg.type === "assistant") {
       const { message } = msg as SDKAssistantMessage;
       for (const block of message.content) {
-        const b = block as Record<string, unknown>;
+        const b = block as unknown as Record<string, unknown>;
         if (b.type === "text" && typeof b.text === "string") {
           // Transition to "thinking" once the agent starts producing text
           if (!hasSeenToolUse) {
@@ -182,6 +189,7 @@ export async function processFeature(
         cacheReadTokens: result.usage.cache_read_input_tokens ?? 0,
         cacheWriteTokens: result.usage.cache_creation_input_tokens ?? 0,
         planPoints,
+        sessionId,
       };
     }
   }
@@ -343,7 +351,10 @@ export async function generateSummary(
 
   try {
     const client = new KaiClient(projectDir, SUMMARY_MODEL);
-    return (await client.run(prompt)).trim();
+    const timeout = new Promise<string>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), 30_000),
+    );
+    return (await Promise.race([client.run(prompt), timeout])).trim();
   } catch {
     return "";
   }
@@ -375,7 +386,10 @@ export async function generateTitle(
 
   try {
     const client = new KaiClient(projectDir, TITLE_MODEL);
-    const raw = (await client.run(prompt)).trim();
+    const timeout = new Promise<string>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), 30_000),
+    );
+    const raw = (await Promise.race([client.run(prompt), timeout])).trim();
     // Enforce the 20-80 character constraint
     if (raw.length < 20 || raw.length > 80) {
       // Truncate or return as-is if close enough

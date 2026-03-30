@@ -357,6 +357,74 @@ function CommitPrompt({
 }
 
 // ---------------------------------------------------------------------------
+// Welcome Panel — shown when watching for features (idle state)
+// ---------------------------------------------------------------------------
+
+function WelcomePanel({
+  welcomeText,
+  kaibotVersion,
+  projectDir,
+  cols,
+}: {
+  welcomeText: string;
+  kaibotVersion: string;
+  projectDir: string;
+  cols: number;
+}): React.JSX.Element {
+  const lineWidth = Math.max(cols - 6, 40);
+  const lines = welcomeText.split("\n");
+
+  return (
+    <Box flexDirection="column" paddingX={1}>
+      {lines.map((line, i) => {
+        // Headings
+        if (line.startsWith("# ")) {
+          return (
+            <Text key={i} bold color="cyan">
+              {truncate(line.slice(2), lineWidth)}
+            </Text>
+          );
+        }
+        if (line.startsWith("## ")) {
+          return (
+            <Text key={i} bold color="yellow">
+              {"\n" + truncate(line.slice(3), lineWidth)}
+            </Text>
+          );
+        }
+        // Table header separator
+        if (/^\|[\s-|]+\|$/.test(line)) {
+          return <Text key={i} dimColor>{truncate(line, lineWidth)}</Text>;
+        }
+        // Table rows and numbered items
+        if (line.startsWith("|") || /^\d+\./.test(line.trim())) {
+          return (
+            <Text key={i} color="white">
+              {truncate(line, lineWidth)}
+            </Text>
+          );
+        }
+        // Blank lines
+        if (line.trim() === "") {
+          return <Text key={i}>{" "}</Text>;
+        }
+        // Regular text
+        return (
+          <Text key={i} color="white">
+            {truncate(line, lineWidth)}
+          </Text>
+        );
+      })}
+      <Box marginTop={1}>
+        <Text color="greenBright" bold>
+          {`You are running KaiBot v${kaibotVersion} in ${projectDir}`}
+        </Text>
+      </Box>
+    </Box>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Plan Panel (right side — 40% width)
 // ---------------------------------------------------------------------------
 
@@ -945,6 +1013,9 @@ export function App(): React.JSX.Element {
     );
   }
 
+  // Show welcome screen when watching and no feature is active
+  const showWelcome = state.status === "watching" && !state.featureName && state.welcomeText;
+
   return (
     <Box flexDirection="column" paddingX={1}>
       <Header
@@ -955,29 +1026,41 @@ export function App(): React.JSX.Element {
         featureStage={state.featureStage}
         cols={cols}
       />
-      <Box>
-        {/* Left side — activity panels (60%) */}
-        <Box flexDirection="column" width={leftCols}>
+      {showWelcome ? (
+        <Box flexDirection="column">
           <Box height={1} />
-          <ThinkingPanel lines={state.thinkingLines} cols={leftCols} rows={rows} />
-          <Box height={1} />
-          <CommandPanel commands={state.commands} cols={leftCols} />
-          <Box height={1} />
-          <FileOpsPanel fileOps={state.fileOps} cols={leftCols} />
-          <Box height={1} />
-          <CommitPrompt prompt={state.commitPrompt} cols={leftCols} />
-        </Box>
-        {/* Right side — plan panel (40%) */}
-        <Box flexDirection="column" width={rightCols}>
-          <Box height={1} />
-          <PlanPanel
-            planLines={state.planLines}
-            planCostInfo={state.planCostInfo}
-            featureStage={state.featureStage}
-            cols={rightCols}
+          <WelcomePanel
+            welcomeText={state.welcomeText}
+            kaibotVersion={state.kaibotVersion}
+            projectDir={state.projectDir}
+            cols={cols}
           />
         </Box>
-      </Box>
+      ) : (
+        <Box>
+          {/* Left side — activity panels (60%) */}
+          <Box flexDirection="column" width={leftCols}>
+            <Box height={1} />
+            <ThinkingPanel lines={state.thinkingLines} cols={leftCols} rows={rows} />
+            <Box height={1} />
+            <CommandPanel commands={state.commands} cols={leftCols} />
+            <Box height={1} />
+            <FileOpsPanel fileOps={state.fileOps} cols={leftCols} />
+            <Box height={1} />
+            <CommitPrompt prompt={state.commitPrompt} cols={leftCols} />
+          </Box>
+          {/* Right side — plan panel (40%) */}
+          <Box flexDirection="column" width={rightCols}>
+            <Box height={1} />
+            <PlanPanel
+              planLines={state.planLines}
+              planCostInfo={state.planCostInfo}
+              featureStage={state.featureStage}
+              cols={rightCols}
+            />
+          </Box>
+        </Box>
+      )}
       <HotkeyBar
         status={state.status}
         flashMessage={state.flashMessage}

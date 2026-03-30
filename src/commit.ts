@@ -8,6 +8,39 @@ import { readFileSync } from "fs";
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Extract a meaningful single-line error message from an execSync failure.
+ * execSync errors carry stderr as a Buffer on the thrown Error object.
+ */
+function extractGitError(err: unknown): string {
+  if (err instanceof Error) {
+    const e = err as Error & { stderr?: Buffer | string; stdout?: Buffer | string };
+    const stderr = e.stderr ? String(e.stderr).trim() : "";
+    if (stderr) return stderr.split("\n").filter(Boolean)[0] ?? stderr;
+    return err.message.split("\n").filter(Boolean)[0] ?? err.message;
+  }
+  return String(err).split("\n")[0];
+}
+
+/** Returns true if there is a configured git remote named "origin". */
+function hasRemote(cwd: string): boolean {
+  try {
+    const out = execSync("git remote get-url origin", {
+      cwd,
+      encoding: "utf8",
+      stdio: "pipe",
+      timeout: 10_000,
+    }).trim();
+    return out.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 /** Check whether the project directory is inside a git repository. */
 function isGitRepo(cwd: string): boolean {
   try {
@@ -128,11 +161,26 @@ export async function promptAndCommit(
       stdio: "pipe",
       timeout: 30_000,
     });
-    uiStore.setStatusMessage(`Committed: "${message}"`);
-    return true;
   } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    uiStore.setStatusMessage(`Commit failed: ${errMsg.split("\n")[0]}`);
+    const errMsg = extractGitError(err);
+    uiStore.setStatusMessage(`Commit failed: ${errMsg}`);
+    uiStore.pushConversationSystem(`⚠️ Git commit failed: ${errMsg}`);
     return false;
   }
+
+  // Attempt git push if a remote is configured — failure is non-fatal.
+  if (hasRemote(projectDir)) {
+    try {
+      execSync("git push", { cwd: projectDir, stdio: "pipe", timeout: 60_000 });
+      uiStore.setStatusMessage(`Committed and pushed: "${message}"`);
+    } catch (err) {
+      const errMsg = extractGitError(err);
+      uiStore.setStatusMessage(`Committed (push failed): "${message}"`);
+      uiStore.pushConversationSystem(`⚠️ Git push failed: ${errMsg}`);
+    }
+  } else {
+    uiStore.setStatusMessage(`Committed: "${message}"`);
+  }
+
+  return true;
 }

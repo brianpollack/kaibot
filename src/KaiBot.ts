@@ -418,6 +418,7 @@ export class KaiBot {
         errorMessage: null,
         title: featureTitle,
         summary,
+        sessionId: stats.sessionId ?? null,
         conversationHistory,
         fileActivity,
       };

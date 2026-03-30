@@ -89,7 +89,7 @@ export async function runTodoPlan(
       if (msg.type === "assistant") {
         const { message } = msg as SDKAssistantMessage;
         for (const block of message.content) {
-          const b = block as Record<string, unknown>;
+          const b = block as unknown as Record<string, unknown>;
           if (b.type === "text" && typeof b.text === "string") {
             planText += b.text;
             uiStore.appendThinking(b.text);
