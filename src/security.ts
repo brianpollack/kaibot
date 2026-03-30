@@ -45,6 +45,9 @@ const ALLOWED_COMMANDS = new Set([
   // Network (read-only)
   "curl",
   "wget",
+  // Graphics
+  "sips",
+  "convert",
 ]);
 
 /**

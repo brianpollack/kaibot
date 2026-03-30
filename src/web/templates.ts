@@ -20,6 +20,7 @@ export function renderProjectSelectionPage(_server: WebServer): string {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Protovate KaiBot — Select Project</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -51,6 +52,12 @@ export function renderProjectSelectionPage(_server: WebServer): string {
       font-weight: 700;
       color: #60A5FA;
       margin-bottom: 8px;
+    }
+    .logo img {
+      width: 48px;
+      height: 48px;
+      vertical-align: middle;
+      margin-right: 10px;
     }
     .subtitle {
       text-align: center;
@@ -181,7 +188,7 @@ export function renderProjectSelectionPage(_server: WebServer): string {
 </head>
 <body>
   <div class="card">
-    <div class="logo">&#x1F916; Protovate KaiBot</div>
+    <div class="logo"><img src="/static/images/KaiBotLogo64.png" alt="KaiBot Logo" /> Protovate KaiBot</div>
     <div class="subtitle">Select a project folder to get started</div>
 
     <label for="path-input">Project Folder</label>
@@ -399,6 +406,7 @@ export function renderMainPage(server: WebServer): string {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Protovate KaiBot — ${esc(projectName)}</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
 
   <!-- App styles (no external CDN dependencies) -->
   <link rel="stylesheet" href="/static/css/main.css" />
@@ -415,7 +423,7 @@ export function renderMainPage(server: WebServer): string {
   <!-- ── Top Status Bar ─────────────────────────────────────────────── -->
   <header id="top-status" role="banner">
     <div class="status-left">
-      <span class="logo" aria-label="Protovate KaiBot">&#x1F916; Protovate KaiBot</span>
+      <span class="logo" aria-label="Protovate KaiBot"><img src="/static/images/KaiBotLogo64.png" alt="KaiBot Logo" style="width:28px;height:28px;vertical-align:middle;margin-right:8px;" /> Protovate KaiBot</span>
       <span id="bot-status" class="badge badge-idle" role="status" aria-live="polite">IDLE</span>
     </div>
     <div class="status-right">

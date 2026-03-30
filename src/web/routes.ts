@@ -139,6 +139,12 @@ export function handleRequest(
     return;
   }
 
+  // ── favicon.ico — serve the KaiBot logo icon ──────────────────────
+  if (pathname === "/favicon.ico") {
+    serveStatic("/static/favicon.ico", res);
+    return;
+  }
+
   // ── Static files: /static/* and /vendor/* — always available ───────
   if (pathname.startsWith("/static/") || pathname.startsWith("/vendor/")) {
     serveStatic(pathname, res);

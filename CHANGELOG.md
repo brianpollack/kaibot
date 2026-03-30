@@ -139,3 +139,6 @@ Unified the conversation rendering across the KaiBot Web UI into a single modula
 March 30th, 2026: main: brian
 Implemented clickable "Project" label in the top status bar that returns the user to the project selection screen. Changes span the full stack:
 
+March 30th, 2026: main: brian
+Replaced the 🤖 emoji placeholder logo with the actual KaiBot logo image throughout the web UI:
+
