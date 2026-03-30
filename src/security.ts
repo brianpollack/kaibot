@@ -1,3 +1,5 @@
+import { platform } from "os";
+
 import type {
   HookCallback,
   PreToolUseHookInput,
@@ -5,9 +7,9 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 
 /**
- * Bash commands that are permitted to run within the project sandbox.
+ * Bash/shell commands permitted on Unix (Linux/macOS).
  */
-const ALLOWED_COMMANDS = new Set([
+const ALLOWED_UNIX = new Set([
   // Filesystem
   "ls",
   "cat",
@@ -51,14 +53,83 @@ const ALLOWED_COMMANDS = new Set([
 ]);
 
 /**
- * PreToolUse hook that validates Bash commands against an allowlist.
+ * Commands permitted on Windows (CMD / PowerShell / Git Bash).
+ * Includes native Windows equivalents and cross-platform tools
+ * commonly available via Git for Windows.
+ */
+const ALLOWED_WINDOWS = new Set([
+  // Filesystem (CMD built-ins)
+  "dir",
+  "type",
+  "copy",
+  "move",
+  "del",
+  "md",
+  "rd",
+  "mkdir",
+  "cd",
+  "echo",
+  // PowerShell executables
+  "powershell",
+  "pwsh",
+  // Search / text processing
+  "grep",
+  "rg",
+  "find",
+  "findstr",
+  "where",
+  "awk",
+  "sed",
+  // Node / package management
+  "node",
+  "npm",
+  "npx",
+  "tsx",
+  "tsc",
+  // Python
+  "python",
+  "python3",
+  "pip",
+  "pip3",
+  // Git
+  "git",
+  // Elixir
+  "mix",
+  "elixir",
+  "iex",
+  // Network (curl is built into Windows 10+)
+  "curl",
+  // Graphics (ImageMagick)
+  "convert",
+  "magick",
+]);
+
+const IS_WINDOWS = platform() === "win32";
+const ALLOWED_COMMANDS = IS_WINDOWS ? ALLOWED_WINDOWS : ALLOWED_UNIX;
+
+/**
+ * PreToolUse hook that validates Bash/shell commands against an allowlist.
  * Commands not in ALLOWED_COMMANDS are blocked.
+ *
+ * On Windows, strips a leading `cmd /c` or `powershell -Command` wrapper
+ * before extracting the base command.
  */
 export const bashSecurityHook: HookCallback = async (input): Promise<SyncHookJSONOutput> => {
   const preToolInput = input as PreToolUseHookInput;
   const toolInput = preToolInput.tool_input as { command?: string } | undefined;
   const command = toolInput?.command?.trim() ?? "";
-  const baseCommand = command.split(/\s+/)[0] ?? "";
+
+  // On Windows, strip a shell-launcher prefix so we validate the actual command.
+  const normalized = IS_WINDOWS
+    ? command
+        .replace(
+          /^(?:cmd(?:\.exe)?\s+\/[cC]\s+|powershell(?:\.exe)?\s+-(?:Command|c)\s+)/i,
+          "",
+        )
+        .trim()
+    : command;
+
+  const baseCommand = (normalized.split(/\s+/)[0] ?? "").toLowerCase();
 
   if (!ALLOWED_COMMANDS.has(baseCommand)) {
     return {
