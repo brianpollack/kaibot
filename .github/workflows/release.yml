@@ -48,7 +48,7 @@ jobs:
           fi
           npm run dist:mac
 
-  # ── Windows NSIS installer (x64 + arm64) ─────────────────────────────────
+  # ── Windows NSIS installer — build, sign via SSL.com eSigner, publish ─────
   build-win:
     runs-on: windows-latest
     environment: dist
@@ -66,17 +66,41 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and publish win
+      - name: Build Windows installer (unsigned)
+        shell: pwsh
+        env:
+          # Prevent electron-builder from looking for a local cert
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run build:all; npx electron-builder --win --publish never
+
+      - name: Find installer path
+        id: find_exe
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem release\*.exe | Select-Object -First 1 -ExpandProperty FullName
+          echo "path=$exe" >> $env:GITHUB_OUTPUT
+          echo "Found installer: $exe"
+
+      - name: Sign with SSL.com eSigner
+        uses: ssl-com/esigner-codesign@v3
+        with:
+          command: sign
+          username: ${{ secrets.ES_USERNAME }}
+          credential_id: ${{ secrets.ES_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.ES_TOTP_SECRET }}
+          file_path: ${{ steps.find_exe.outputs.path }}
+          malware_block: "false"
+          override: "true"
+          environment_name: "PROD"
+
+      - name: Upload signed installer to GitHub Release
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WIN_CERT_BASE64: ${{ secrets.WIN_CERT_BASE64 }}
-          WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
         run: |
-          # Decode and wire up the cert only when the secret is present
-          if ($env:WIN_CERT_BASE64) {
-            [IO.File]::WriteAllBytes("win-cert.p12", [Convert]::FromBase64String($env:WIN_CERT_BASE64))
-            $env:CSC_LINK = (Get-Location).Path + "\win-cert.p12"
-            $env:CSC_KEY_PASSWORD = $env:WIN_CERT_PASSWORD
+          $exe = "${{ steps.find_exe.outputs.path }}"
+          $blockmap = "$exe.blockmap"
+          gh release upload ${{ github.ref_name }} $exe --clobber
+          if (Test-Path $blockmap) {
+            gh release upload ${{ github.ref_name }} $blockmap --clobber
           }
-          npm run dist:win
