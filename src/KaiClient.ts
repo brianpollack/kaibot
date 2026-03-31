@@ -151,6 +151,7 @@ export function findClaudeExecutable(): string | undefined {
   const candidates =
     process.platform === "win32"
       ? [
+          join(home, ".local", "bin", "claude.exe"),
           join(home, "AppData", "Local", "Programs", "claude", "claude.exe"),
           join(home, ".claude", "local", "claude.exe"),
           "C:\\Program Files\\Claude\\claude.exe",
