@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, shell, dialog } from "electron";
 import pkg from "electron-updater";
 const { autoUpdater } = pkg;
+import { spawn } from "child_process";
 import { join } from "path";
 import { fileURLToPath } from "url";
 
@@ -242,6 +243,11 @@ app.whenReady().then(async () => {
   // ── Verify Claude Code is installed ────────────────────────────────────
   const { findClaudeExecutable } = await import("../dist/KaiClient.js");
   if (!findClaudeExecutable()) {
+    const isWindows = process.platform === "win32";
+    const buttons = isWindows
+      ? ["Open Download Page", "Install Claude for me", "Quit"]
+      : ["Open Download Page", "Quit"];
+
     const choice = dialog.showMessageBoxSync({
       type: "warning",
       title: "Claude Code Not Found",
@@ -250,13 +256,30 @@ app.whenReady().then(async () => {
         "KaiBot uses Claude Code Terminal to process features with AI.\n\n" +
         "Download and install it from:\nhttps://claude.ai/downloads\n\n" +
         "After installing, relaunch KaiBot.",
-      buttons: ["Open Download Page", "Quit"],
+      buttons,
       defaultId: 0,
-      cancelId: 1,
+      cancelId: isWindows ? 2 : 1,
     });
+
     if (choice === 0) {
+      // Open download page in browser
       shell.openExternal("https://claude.ai/downloads").catch(() => {});
+    } else if (isWindows && choice === 1) {
+      // Run the official Claude Code installer via PowerShell
+      spawn(
+        "powershell",
+        ["-NoExit", "-Command", "irm https://claude.ai/install.ps1 | iex"],
+        { detached: true, stdio: "ignore" },
+      ).unref();
+      dialog.showMessageBoxSync({
+        type: "info",
+        title: "Installing Claude Code",
+        message: "Installation started in a PowerShell window.",
+        detail: "Wait for the installation to complete, then relaunch KaiBot.",
+        buttons: ["OK"],
+      });
     }
+
     app.quit();
     return;
   }
