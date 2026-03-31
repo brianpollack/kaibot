@@ -10,8 +10,21 @@ permissions:
 
 jobs:
 
+  # ── Create the GitHub Release first so both build jobs can upload to it ───
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ github.ref_name }}" --title "KaiBot ${{ github.ref_name }}" --generate-notes
+
   # ── macOS DMG (x64 + arm64) ──────────────────────────────────────────────
   build-mac:
+    needs: create-release
     runs-on: macos-latest
     environment: dist
 
@@ -39,7 +52,6 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          # Decode the base64-encoded .p12 cert only when the secret is present
           if [ -n "$CSC_LINK" ]; then
             echo "$CSC_LINK" | base64 --decode > mac-cert.p12
             export CSC_LINK=$(pwd)/mac-cert.p12
@@ -50,6 +62,7 @@ jobs:
 
   # ── Windows NSIS installer — build, sign via SSL.com eSigner, publish ─────
   build-win:
+    needs: create-release
     runs-on: windows-latest
     environment: dist
 
@@ -69,7 +82,6 @@ jobs:
       - name: Build Windows installer (unsigned)
         shell: pwsh
         env:
-          # Prevent electron-builder from looking for a local cert
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run build:all; npx electron-builder --win --publish never
 
@@ -101,7 +113,7 @@ jobs:
         run: |
           $exe = "${{ steps.find_exe.outputs.path }}"
           $blockmap = "$exe.blockmap"
-          gh release upload ${{ github.ref_name }} $exe --clobber
+          gh release upload "${{ github.ref_name }}" $exe --clobber
           if (Test-Path $blockmap) {
-            gh release upload ${{ github.ref_name }} $blockmap --clobber
+            gh release upload "${{ github.ref_name }}" $blockmap --clobber
           }
