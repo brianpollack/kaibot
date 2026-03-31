@@ -82,7 +82,7 @@ jobs:
           echo "Found installer: $exe"
 
       - name: Sign with SSL.com eSigner
-        uses: ssl-com/esigner-codesign@v3
+        uses: SSLcom/esigner-codesign@v3
         with:
           command: sign
           username: ${{ secrets.ES_USERNAME }}
