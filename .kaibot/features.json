@@ -4788,5 +4788,103 @@
         "timestamp": "2026-03-30T20:14:59.495Z"
       }
     ]
+  },
+  {
+    "id": "g5affCoi",
+    "requestedAt": "2026-03-30T20:18:56.191Z",
+    "completedAt": "2026-03-30T20:19:55.609Z",
+    "executionTimeMs": 30410,
+    "provider": "Anthropic",
+    "model": "claude-opus-4-6",
+    "tokensIn": 9,
+    "tokensOut": 1426,
+    "cacheReadTokens": 100564,
+    "cacheWriteTokens": 6006,
+    "totalCostUsd": 0.1235145,
+    "numTurns": 7,
+    "filesChanged": [
+      "CHANGELOG.md",
+      "features/complete/g5affCoi.md",
+      "web/static/css/main.css"
+    ],
+    "testsAdded": [],
+    "gitBranch": "main",
+    "gitCommitHash": "e376f72675ff0fab4111d4100b821ea7f7d389b9",
+    "description": "Feature ID: g5affCoi The `#status-message` element inside the `#bottom-status` footer bar can display long text that wraps to the next line, breaking the fixed 30px height layout. Add CSS text-overflow ellipsis handling so long status text is truncated with \"…\" instead of wrapping. **Current behavior:** Long status messages wrap onto multiple lines, overflowing the 30px footer height. **Desired behavior:** Long status messages are truncated with an ellipsis (`…`) and stay on a single line within the footer. **Implementation:** In `web/static/css/main.css`, add the following CSS properties to the `#bottom-status` rule (or as a new `#status-message` rule): - `white-space: nowrap` — prevent text from wrapping - `overflow: hidden` — hide overflowing text - `text-overflow: ellipsis` — show \"…\" when text is truncated The most appropriate place is a new `#status-message` rule since the `#bottom-status` footer is a flex container and the span inside it should handle its own overflow. The `#status-message` span needs: ```css #status-message { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; } ``` The `min-width: 0` is needed because flex children don't shrink below their content size by default — this allows the span to shrink and trigger ellipsis. **Acceptance criteria:** - The `#status-message` span never wraps text to a second line - When the status text is too long for the available width, it is truncated with an ellipsis (\"…\") - The `#bottom-status` footer maintains its fixed 30px height regardless of status text length - Short status messages display normally with no truncation **Technical notes:** - File to modify: `web/static/css/main.css` (add rules near the existing `#bottom-status` block around line 1293) - This is a CSS-only change — no JavaScript or TypeScript modifications needed - Tests should NOT be added — this is a purely visual/styling fix",
+    "planPoints": [
+      "1. Add `#status-message` CSS rule after the `#bottom-status` block in `web/static/css/main.css` — added `white-space: nowrap`, `overflow: hidden`, `text-overflow: ellipsis`, and `min-width: 0` rules at line 1305"
+    ],
+    "source": "file",
+    "linearIssueId": null,
+    "linearIdentifier": null,
+    "status": "success",
+    "errorMessage": null,
+    "title": "Truncate long status text with ellipsis",
+    "summary": "Added CSS text-overflow handling to the `#status-message` element in `web/static/css/main.css` to prevent long status text from wrapping and breaking the fixed 30px footer height. The new rule applies `white-space: nowrap`, `overflow: hidden`, `text-overflow: ellipsis`, and `min-width: 0` to truncate long messages with an ellipsis while keeping them on a single line. This CSS-only change ensures the footer layout remains stable regardless of status message length.",
+    "sessionId": "cc513058-e790-40a5-946f-806b7c578e9d",
+    "conversationHistory": [
+      {
+        "type": "thinking",
+        "content": "\n\nI'll start by reading the feature file to understand what needs to be built.Now let me find and read the CSS file:",
+        "timestamp": "2026-03-30T20:19:55.609Z"
+      },
+      {
+        "type": "command",
+        "content": "Grepping for #bottom-status in main.css",
+        "timestamp": "2026-03-30T20:19:13.746Z"
+      },
+      {
+        "type": "thinking",
+        "content": "Now I have everything I need. Let me append the plan and implement the change.",
+        "timestamp": "2026-03-30T20:19:55.609Z"
+      },
+      {
+        "type": "file",
+        "content": "{\"tool\":\"Edit\",\"path\":\"/Users/brian/Projects/KaiBot/web/static/css/main.css\",\"old\":\"  flex-shrink: 0;\\n}\\n\\n/* ---------------------------------------------------------------------------\\n   Accessibility: skip link\",\"new\":\"  flex-shrink: 0;\\n}\\n\\n#status-message {\\n  white-space: nowrap;\\n  overflow: hidden;\\n  text-overflow: ellipsis;\\n  min-width: 0;\\n}\\n\\n/* ---------------------------------------------------------------------------\\n   Accessibility: skip link\"}",
+        "timestamp": "2026-03-30T20:19:24.938Z"
+      },
+      {
+        "type": "thinking",
+        "content": "Now mark the step as done and add the summary:The implementation is complete. Here's what was done:\n\n**CSS change in `web/static/css/main.css`:** Added a new `#status-message` rule right after the existing `#bottom-status` block (at line 1305) with four properties:\n\n- `white-space: nowrap` — prevents text wrapping\n- `overflow: hidden` — hides overflowing content\n- `text-overflow: ellipsis` — shows \"…\" when truncated\n- `min-width: 0` — allows the flex child to shrink below its content size, enabling the ellipsis to trigger\n\nThis ensures the `#bottom-status` footer maintains its fixed 30px height regardless of status text length, with long messages cleanly truncated with an ellipsis.",
+        "timestamp": "2026-03-30T20:19:55.609Z"
+      },
+      {
+        "type": "system",
+        "content": "✅ Feature complete — Cost: $0.1235  Turns: 7  Time: 30.7s",
+        "timestamp": "2026-03-30T20:19:55.609Z"
+      }
+    ],
+    "fileActivity": [
+      {
+        "type": "read",
+        "path": "g5affCoi.md",
+        "preview": "",
+        "timestamp": "2026-03-30T20:19:09.441Z"
+      },
+      {
+        "type": "read",
+        "path": "main.css",
+        "preview": "",
+        "timestamp": "2026-03-30T20:19:16.357Z"
+      },
+      {
+        "type": "edit",
+        "path": "g5affCoi.md",
+        "preview": "- File to modify: `web/static/",
+        "timestamp": "2026-03-30T20:19:21.537Z"
+      },
+      {
+        "type": "edit",
+        "path": "main.css",
+        "preview": "  flex-shrink: 0; }  /* ------",
+        "timestamp": "2026-03-30T20:19:24.936Z"
+      },
+      {
+        "type": "edit",
+        "path": "g5affCoi.md",
+        "preview": "- [ ] 1. Add `#status-message`",
+        "timestamp": "2026-03-30T20:19:31.353Z"
+      }
+    ]
   }
 ]
