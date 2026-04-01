@@ -2602,9 +2602,9 @@ ul {
 }
 
 .working-video {
-  width: 96px;
-  height: 96px;
-  object-fit: contain;
+  width: 192px;
+  height: 192px;
+  object-fit: cover;
   border: none;
   outline: none;
 }
