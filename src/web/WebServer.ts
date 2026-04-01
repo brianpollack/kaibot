@@ -7,6 +7,7 @@ import { WebSocketServer } from "ws";
 import { NpmCommandRunner } from "./NpmCommandRunner.js";
 import { handleRequest } from "./routes.js";
 import { setupWebSocketHandler } from "./wsHandler.js";
+import { uiStore } from "../ui/store.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -138,10 +139,14 @@ export class WebServer extends EventEmitter {
     }
   }
 
-  /** Wire package.json change events from an NpmCommandRunner to all WS clients. */
+  /** Wire package.json change events from an NpmCommandRunner through uiStore.
+   *  The wsHandler debounces `package-json-changed` events so that both the
+   *  fs.watch fallback and explicit agent-triggered notifications share a
+   *  single 300ms debounce window — preventing duplicate broadcasts.
+   */
   private wireNpmRunner(runner: NpmCommandRunner): void {
     runner.on("scripts-changed", () => {
-      this.broadcast({ type: "npm-scripts-updated" });
+      uiStore.emit("package-json-changed");
     });
   }
 

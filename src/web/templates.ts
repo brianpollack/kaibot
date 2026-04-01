@@ -680,10 +680,10 @@ export function renderMainPage(server: WebServer): string {
   <div id="working-overlay" class="working-overlay" style="display:none"
        role="dialog" aria-modal="true" aria-label="Processing">
     <div class="working-card">
-      <!-- TODO: replace with robot_working.png when asset is created -->
-      <img class="working-image" src="/static/images/thinking64x64.png" alt="Working" />
+      <video class="working-video" src="/static/images/busy.mp4" autoplay loop muted playsinline></video>
       <div class="working-spinner"></div>
       <div id="working-phrase" class="working-phrase">Thinking hard…</div>
+      <div id="working-thinking" class="working-thinking"></div>
     </div>
   </div>
 

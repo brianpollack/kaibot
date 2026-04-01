@@ -157,3 +157,6 @@ Implemented a "Working" modal dialog that displays a full-screen overlay when th
 March 30th, 2026: main: brian
 Added a `#status-message` CSS rule in `web/static/css/main.css` immediately after the `#bottom-status` block. The rule applies `white-space: nowrap`, `overflow: hidden`, `text-overflow: ellipsis`, and `min-width: 0` to ensure long status messages are truncated with an ellipsis instead of wrapping and breaking the fixed 30px footer height. This is a CSS-only change with no logic modifications.
 
+April 1st, 2026: main: brian
+Added an explicit, event-driven notification path so that when the Claude agent writes or edits `package.json` via SDK tools, the browser npm commands list refreshes reliably. In `routeToolUse()` (KaiAgent.ts), Write/Edit operations targeting a path ending in `package.json` now emit a `"package-json-changed"` event on `uiStore`. In `wsHandler.ts`, a debounced listener broadcasts `{ type: "npm-scripts-updated" }` to all WebSocket clients. The existing `fs.watch` fallback in `NpmCommandRunner` was rerouted through the same `uiStore` event and debounce window (300ms), ensuring no duplicate broadcasts when both triggers fire for the same edit. Five unit tests verify the detection logic.
+

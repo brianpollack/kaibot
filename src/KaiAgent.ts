@@ -215,6 +215,12 @@ export function routeToolUse(name: string, input: Record<string, unknown> | unde
     const opType = name.toLowerCase() as "read" | "write" | "edit";
     const preview = getFileOpPreview(name, input);
     uiStore.pushFileOp({ type: opType, path: basename(filePath), preview });
+    // Notify listeners when the agent writes/edits package.json so the npm
+    // scripts list can be refreshed proactively (fs.watch is unreliable for
+    // sandboxed SDK file tools).
+    if ((name === "Write" || name === "Edit") && filePath.endsWith("package.json")) {
+      uiStore.emit("package-json-changed");
+    }
     // Record Write/Edit events in the conversation timeline, skipping features/ tracking files
     const inFeaturesDir = /[/\\]features[/\\]|^features[/\\]/.test(filePath);
     if (!inFeaturesDir && name === "Edit") {

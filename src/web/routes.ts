@@ -21,6 +21,7 @@ import { loadPathHistory, addToPathHistory } from "../pathHistory.js";
 import { loadProjectEnv } from "../env.js";
 import { loadCodeAssistOptions, loadPromptContent, runCodeAssist } from "../codeAssist.js";
 import { KaiClient } from "../KaiClient.js";
+import type { SDKAssistantMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { todoExists, loadTodoItems, runTodoPlan } from "../todoAssist.js";
 
 // ---------------------------------------------------------------------------
@@ -627,7 +628,31 @@ export function handleRequest(
 
         const model = uiStore.getState().model || "claude-opus-4-6";
         const client = KaiClient.create(server.projectDir!, model);
-        const response = await client.run(prompt);
+
+        // Clear any stale thinking lines and stream new ones via WebSocket
+        uiStore.clearThinking();
+        let response = "";
+        for await (const msg of client.query(prompt)) {
+          if (msg.type === "assistant") {
+            const { message } = msg as SDKAssistantMessage;
+            for (const block of message.content) {
+              const b = block as unknown as Record<string, unknown>;
+              if (b.type === "thinking" && typeof b.thinking === "string") {
+                uiStore.appendThinking(b.thinking);
+              } else if (b.type === "text" && typeof b.text === "string") {
+                uiStore.appendThinking(b.text);
+              }
+            }
+          } else if (msg.type === "result") {
+            const result = msg as SDKResultMessage;
+            if (result.subtype === "success") {
+              response = result.result;
+            } else {
+              throw new Error(`Query failed (${result.subtype}): ${result.errors.join(", ")}`);
+            }
+          }
+        }
+        if (!response) throw new Error("Query completed without a result message");
 
         // Parse the response — expect FEATURE TITLE: and DESCRIPTION: sections
         const parsed = parseFeatureAssistResponse(response);

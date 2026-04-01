@@ -694,6 +694,15 @@ function connectWebSocket() {
         }
         state = Object.assign({}, state, msg.data);
         updateDOM();
+        // Update thinking line in busy dialog if it is visible
+        var workingOverlay = document.getElementById("working-overlay");
+        var workingThinkingEl = document.getElementById("working-thinking");
+        if (workingOverlay && workingOverlay.style.display !== "none" && workingThinkingEl) {
+          var tLines = state.thinkingLines;
+          if (tLines && tLines.length > 0) {
+            workingThinkingEl.textContent = tLines[tLines.length - 1];
+          }
+        }
       } else if (msg.type === "npm-output" || msg.type === "npm-status" || msg.type === "npm-clear") {
         handleNpmMessage(msg);
       } else if (msg.type === "npm-scripts-updated") {

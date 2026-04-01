@@ -2601,10 +2601,12 @@ ul {
   max-width: 90vw;
 }
 
-.working-image {
+.working-video {
   width: 96px;
   height: 96px;
   object-fit: contain;
+  border: none;
+  outline: none;
 }
 
 .working-spinner {
@@ -2627,4 +2629,16 @@ ul {
   text-align: center;
   min-height: 1.4em;
   transition: opacity 0.3s ease;
+}
+
+.working-thinking {
+  color: #4b5563;
+  font-size: 11px;
+  font-family: monospace;
+  text-align: center;
+  max-width: 400px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 1.2em;
 }

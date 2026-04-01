@@ -168,6 +168,18 @@ export function setupWebSocketHandler(
   // Subscribe to uiStore changes and broadcast to all clients
   uiStore.on("change", broadcast);
 
+  // When the agent writes/edits package.json, proactively broadcast an
+  // npm-scripts-updated message.  Debounced at 300ms so that if the existing
+  // fs.watch fallback also fires for the same edit, only one broadcast is sent.
+  let pkgJsonDebounce: ReturnType<typeof setTimeout> | null = null;
+  uiStore.on("package-json-changed", () => {
+    if (pkgJsonDebounce) clearTimeout(pkgJsonDebounce);
+    pkgJsonDebounce = setTimeout(() => {
+      pkgJsonDebounce = null;
+      broadcastRaw({ type: "npm-scripts-updated" });
+    }, 300);
+  });
+
   // Subscribe to npm runner events if already available
   if (npmRunner) {
     wireNpmEvents(npmRunner);
