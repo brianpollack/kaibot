@@ -3,6 +3,7 @@ import { join } from "path";
 
 import type { SDKAssistantMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 
+import { addFollowupCost } from "../featureDb.js";
 import { routeToolUse } from "../KaiAgent.js";
 import { KaiClient } from "../KaiClient.js";
 import type { ProviderName } from "../models.js";
@@ -17,6 +18,7 @@ export interface FollowupSession {
   featureId: string;
   client: KaiClient;
   logPath: string;
+  projectDir: string;
   /** Resolves the Promise in KaiBot so it returns to watching. */
   onClose: () => void;
 }
@@ -31,9 +33,10 @@ export function registerSession(
   featureId: string,
   client: KaiClient,
   logPath: string,
+  projectDir: string,
   onClose: () => void,
 ): void {
-  sessions.set(featureId, { featureId, client, logPath, onClose });
+  sessions.set(featureId, { featureId, client, logPath, projectDir, onClose });
 }
 
 export function hasSession(featureId: string): boolean {
@@ -98,12 +101,12 @@ export async function sendFollowup(featureId: string, message: string): Promise<
           uiStore.pushConversationSystem(info);
           uiStore.setStatusMessage(info);
           newEntries.push({ type: "system", content: info, timestamp: new Date().toISOString() });
-          appendToFeatureLog(session.logPath, result.total_cost_usd, result.num_turns, newEntries);
+          appendToFeatureLog(session.logPath, result.total_cost_usd, result.num_turns, newEntries, session.projectDir);
         } else {
           const errMsg = `Follow-up failed: ${result.errors.join(", ")}`;
           uiStore.pushConversationSystem(errMsg);
           newEntries.push({ type: "system", content: errMsg, timestamp: new Date().toISOString() });
-          appendToFeatureLog(session.logPath, 0, 0, newEntries);
+          appendToFeatureLog(session.logPath, 0, 0, newEntries, session.projectDir);
         }
       }
     }
@@ -112,7 +115,7 @@ export async function sendFollowup(featureId: string, message: string): Promise<
     const msg2 = `Follow-up error: ${errMsg}`;
     uiStore.pushConversationSystem(msg2);
     newEntries.push({ type: "system", content: msg2, timestamp: new Date().toISOString() });
-    appendToFeatureLog(session.logPath, 0, 0, newEntries);
+    appendToFeatureLog(session.logPath, 0, 0, newEntries, session.projectDir);
   }
 }
 
@@ -125,6 +128,7 @@ function appendToFeatureLog(
   extraCostUsd: number,
   extraTurns: number,
   newEntries: ConversationLogEntry[],
+  projectDir?: string,
 ): void {
   try {
     const raw = readFileSync(logPath, "utf-8");
@@ -134,6 +138,12 @@ function appendToFeatureLog(
     const existing = (record.conversationHistory as ConversationLogEntry[]) || [];
     record.conversationHistory = [...existing, ...newEntries];
     writeFileSync(logPath, JSON.stringify(record, null, 2) + "\n");
+    // Keep .kaibot/features.json in sync so todaySpend reflects follow-up costs
+    if (projectDir && extraCostUsd && typeof record.id === "string") {
+      addFollowupCost(projectDir, record.id, extraCostUsd);
+    }
+    // Signal browser clients to refresh the features list
+    uiStore.emit("features-updated");
   } catch {
     // Non-critical — don't crash on log update failure
   }
@@ -219,9 +229,11 @@ export async function resumeSession(
   uiStore.setStatus("processing");
 
   // Register session — the onClose callback will be used when the user closes it
-  registerSession(featureId, client, logPath, () => {
+  registerSession(featureId, client, logPath, projectDir, () => {
+    const doneName = uiStore.getState().featureName;
     uiStore.setFollowupFeatureId(null);
     uiStore.resetFeature();
+    uiStore.setFeatureName(doneName);
     uiStore.setStatus("watching");
     uiStore.setStatusMessage("Watching for new features…");
   });
@@ -283,12 +295,12 @@ async function sendFollowupWithResume(
           uiStore.pushConversationSystem(info);
           uiStore.setStatusMessage(info);
           newEntries.push({ type: "system", content: info, timestamp: new Date().toISOString() });
-          appendToFeatureLog(session.logPath, result.total_cost_usd, result.num_turns, newEntries);
+          appendToFeatureLog(session.logPath, result.total_cost_usd, result.num_turns, newEntries, session.projectDir);
         } else {
           const errMsg = `Resumed session failed: ${result.errors.join(", ")}`;
           uiStore.pushConversationSystem(errMsg);
           newEntries.push({ type: "system", content: errMsg, timestamp: new Date().toISOString() });
-          appendToFeatureLog(session.logPath, 0, 0, newEntries);
+          appendToFeatureLog(session.logPath, 0, 0, newEntries, session.projectDir);
         }
       }
     }
@@ -297,6 +309,6 @@ async function sendFollowupWithResume(
     const msg2 = `Resume error: ${errMsg}`;
     uiStore.pushConversationSystem(msg2);
     newEntries.push({ type: "system", content: msg2, timestamp: new Date().toISOString() });
-    appendToFeatureLog(session.logPath, 0, 0, newEntries);
+    appendToFeatureLog(session.logPath, 0, 0, newEntries, session.projectDir);
   }
 }

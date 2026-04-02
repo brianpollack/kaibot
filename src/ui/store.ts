@@ -44,7 +44,7 @@ export interface PlanLine {
   text: string;
 }
 
-export type ConversationItemType = "thinking" | "command" | "agent" | "git" | "system" | "user" | "file";
+export type ConversationItemType = "thinking" | "command" | "agent" | "git" | "system" | "user" | "file" | "clarify-question" | "clarify-answer";
 
 export interface ConversationItem {
   type: ConversationItemType;
@@ -444,6 +444,22 @@ class UIStore extends EventEmitter {
     this.state.conversationItems = [
       ...this.state.conversationItems,
       { type: "system" as const, content: message },
+    ].slice(-MAX_CONVERSATION_ITEMS);
+    this.emitChange();
+  }
+
+  pushConversationClarifyQuestion(question: string): void {
+    this.state.conversationItems = [
+      ...this.state.conversationItems,
+      { type: "clarify-question" as const, content: question, timestamp: Date.now() },
+    ].slice(-MAX_CONVERSATION_ITEMS);
+    this.emitChange();
+  }
+
+  pushConversationClarifyAnswer(answer: string): void {
+    this.state.conversationItems = [
+      ...this.state.conversationItems,
+      { type: "clarify-answer" as const, content: answer, timestamp: Date.now() },
     ].slice(-MAX_CONVERSATION_ITEMS);
     this.emitChange();
   }

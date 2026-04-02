@@ -74,15 +74,41 @@ const BUILTIN_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep", "Bash"];
 // Security settings written to disk so Claude Code respects sandbox / permissions
 // ---------------------------------------------------------------------------
 
+/**
+ * Package-manager and build-tool commands that need outbound network access
+ * (registry fetches, dependency downloads, etc.).  These are excluded from
+ * the sandbox's network restrictions while every other command remains fully
+ * sandboxed.  The list is intentionally narrow — only tools whose primary job
+ * requires the network are included.
+ */
+const SANDBOX_NETWORK_COMMANDS = [
+  "npm",
+  "npx",
+  "pnpm",
+  "yarn",
+  "pip",
+  "pip3",
+  "mix",
+  "hex",
+];
+
 interface SecuritySettings {
-  sandbox: { enabled: boolean; autoAllowBashIfSandboxed: boolean };
+  sandbox: {
+    enabled: boolean;
+    autoAllowBashIfSandboxed: boolean;
+    excludedCommands: string[];
+  };
   permissions: { defaultMode: string; allow: string[] };
   autoMemoryEnabled: boolean;
 }
 
 function buildSecuritySettings(): SecuritySettings {
   return {
-    sandbox: { enabled: true, autoAllowBashIfSandboxed: true },
+    sandbox: {
+      enabled: true,
+      autoAllowBashIfSandboxed: true,
+      excludedCommands: SANDBOX_NETWORK_COMMANDS,
+    },
     permissions: {
       // Auto-approve file edits within the allowed directories below
       defaultMode: "acceptEdits",

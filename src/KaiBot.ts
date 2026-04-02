@@ -435,11 +435,14 @@ export class KaiBot {
       // Keep the agent alive for follow-up prompts until the user closes the session
       uiStore.setFollowupFeatureId(featureId);
       await new Promise<void>((resolve) => {
-        registerSession(featureId, agentClient, logPath, resolve);
+        registerSession(featureId, agentClient, logPath, this.projectDir, resolve);
       });
 
-      // Session was closed by the user — clean up
+      // Session was closed by the user — keep featureName so the nav shows
+      // "Finished", then clean up the rest of the feature state.
+      const doneName = uiStore.getState().featureName;
       uiStore.resetFeature();
+      uiStore.setFeatureName(doneName);
       uiStore.setStatus("watching");
       uiStore.setStatusMessage(this.getWatchingMessage());
     } catch (err) {

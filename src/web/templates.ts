@@ -458,11 +458,17 @@ export function renderMainPage(server: WebServer): string {
     <nav id="side-nav" role="navigation" aria-label="Main navigation">
       <ul>
         <li>
-          <a href="/main" class="nav-item active" aria-current="page"
+          <a href="/main" class="nav-item"
              accesskey="d" title="Dashboard [D]" id="nav-dashboard">
             <span class="nav-icon" aria-hidden="true">&#x1F4CA;</span>
             <span class="nav-label">Dashboard</span>
             <kbd aria-hidden="true">D</kbd>
+          </a>
+        </li>
+        <li id="nav-processing-item" style="display:none">
+          <a href="#processing" class="nav-item" id="nav-processing">
+            <span class="nav-icon" id="nav-processing-icon" aria-hidden="true">&#x2699;&#xFE0F;</span>
+            <span class="nav-label" id="nav-processing-label">Processing</span>
           </a>
         </li>
         <li>
@@ -528,14 +534,26 @@ export function renderMainPage(server: WebServer): string {
       </div>
     </nav>
 
-    <!-- ── Dashboard panels (resizable, no external dependencies) ──── -->
-    <main id="dock-container" role="main" aria-label="Dashboard panels">
+    <!-- ── Welcome view (shown on app load) ─────────────────────────── -->
+    <main id="welcome-view" role="main" aria-label="Welcome">
+      <div id="welcome-content"></div>
+    </main>
+
+    <!-- ── Dashboard (stats) view ───────────────────────────────────── -->
+    <main id="dashboard-view" style="display:none" role="main" aria-label="Dashboard">
+      <div id="dashboard-content">
+        <div class="empty-state">Loading stats…</div>
+      </div>
+    </main>
+
+    <!-- ── Processing panels (resizable, no external dependencies) ──── -->
+    <main id="dock-container" style="display:none" role="main" aria-label="Processing panels">
 
       <!-- Left column: unified conversation feed (thinking + commands + git) -->
       <div id="panels-left">
         <div class="panel" id="panel-conversation">
           <div class="panel-tab-bar">
-            <span class="panel-tab">&#x1F4AC; Conversation</span>
+            <span class="panel-tab active">&#x1F4AC; Conversation</span>
           </div>
           <div class="panel-content" id="conversation-content"
                role="region" aria-label="Agent conversation feed"></div>
@@ -561,28 +579,22 @@ export function renderMainPage(server: WebServer): string {
       <div id="panels-right">
         <div class="panel" id="panel-status">
           <div class="panel-tab-bar">
-            <span class="panel-tab">&#x1F4E1; Feature Status</span>
+            <span class="panel-tab active">&#x1F4E1; Feature Status</span>
           </div>
           <div class="panel-content" id="status-content"
                role="region" aria-label="Feature status panel"></div>
         </div>
         <div class="resize-handle resize-handle-h" id="drag-status-fileops"
              aria-hidden="true" title="Drag to resize"></div>
-        <div class="panel" id="panel-fileops">
+        <div class="panel" id="panel-plan-fileops">
           <div class="panel-tab-bar">
-            <span class="panel-tab">&#x1F4C4; File Operations</span>
-          </div>
-          <div class="panel-content" id="fileops-content"
-               role="region" aria-label="File operations panel"></div>
-        </div>
-        <div class="resize-handle resize-handle-h" id="drag-fileops-plan"
-             aria-hidden="true" title="Drag to resize"></div>
-        <div class="panel" id="panel-plan">
-          <div class="panel-tab-bar">
-            <span class="panel-tab">&#x1F4CB; Plan</span>
+            <span class="panel-tab active" data-panel-tab="plan" id="tab-plan">&#x1F4CB; Plan</span>
+            <span class="panel-tab" data-panel-tab="fileops" id="tab-fileops">&#x1F4C4; File Operations</span>
           </div>
           <div class="panel-content" id="plan-content"
                role="region" aria-label="Plan panel"></div>
+          <div class="panel-content" id="fileops-content" style="display:none"
+               role="region" aria-label="File operations panel"></div>
         </div>
       </div>
 
@@ -591,18 +603,30 @@ export function renderMainPage(server: WebServer): string {
     <!-- ── Features view (hidden by default, toggled by F key / nav) ─── -->
     <main id="features-view" style="display:none" role="main" aria-label="Features list">
       <div id="features-panels">
-        <div class="panel" id="panel-pending">
-          <div class="panel-tab-bar">
-            <span class="panel-tab">&#x23F3; Pending Features</span>
+        <div id="features-top-panels">
+          <div class="panel" id="panel-pending">
+            <div class="panel-tab-bar">
+              <span class="panel-tab active">&#x23F3; Pending Features</span>
+            </div>
+            <div class="panel-content" id="pending-content"
+                 role="region" aria-label="Pending features"
+                 data-drop-target="pending"></div>
           </div>
-          <div class="panel-content" id="pending-content"
-               role="region" aria-label="Pending features"></div>
+          <div class="resize-handle resize-handle-v" id="drag-pending-hold"
+               aria-hidden="true" title="Drag to resize"></div>
+          <div class="panel" id="panel-hold">
+            <div class="panel-tab-bar">
+              <span class="panel-tab active">&#x1F4E5; On Hold (Backlog)</span>
+            </div>
+            <div class="panel-content" id="hold-content"
+                 role="region" aria-label="On hold features"></div>
+          </div>
         </div>
         <div class="resize-handle resize-handle-h" id="drag-features"
              aria-hidden="true" title="Drag to resize"></div>
         <div class="panel" id="panel-complete-features">
           <div class="panel-tab-bar">
-            <span class="panel-tab">&#x2705; Complete Features</span>
+            <span class="panel-tab active">&#x2705; Complete Features</span>
           </div>
           <div class="panel-content" id="complete-features-content"
                role="region" aria-label="Complete features"></div>

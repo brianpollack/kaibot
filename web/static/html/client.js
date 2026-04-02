@@ -263,6 +263,26 @@ var ConversationBlockRenderer = {
     return this._wrapBlock(item, mode, html);
   },
 
+  // -- Clarification question from agent -----------------------------------
+  "clarify-question": function (item, mode) {
+    var html =
+      '<div class="conv-clarify-question">' +
+        '<div class="conv-clarify-header">&#x2753; Agent needs clarification</div>' +
+        '<div class="conv-clarify-text">' + escHtml(String(item.content || "")) + '</div>' +
+      '</div>';
+    return this._wrapBlock(item, mode, html);
+  },
+
+  // -- Clarification answer (user or fallback) ------------------------------
+  "clarify-answer": function (item, mode) {
+    var html =
+      '<div class="conv-clarify-answer">' +
+        '<div class="conv-clarify-header">&#x1F4AC; Clarification response</div>' +
+        '<div class="conv-clarify-text">' + escHtml(String(item.content || "")) + '</div>' +
+      '</div>';
+    return this._wrapBlock(item, mode, html);
+  },
+
   // -- File operation block -------------------------------------------------
   _file: function (item, mode) {
     var fd = {};
@@ -273,21 +293,39 @@ var ConversationBlockRenderer = {
       '<span class="conv-file-op ' + escHtml(fTool) + '">' + escHtml(fd.tool || "File") + '</span>' +
       '<span class="conv-file-path">' + escHtml(fPath) + '</span>' +
       '</div>';
-    var hasBody = fd.old || fd.new || fd.preview;
+    var hasBody = fd.old != null || fd.new != null || fd.preview;
     if (hasBody) {
       inner += '<div class="conv-file-body">';
-      if (fd.old) {
-        inner += '<div class="conv-file-section-label">replaced</div>' +
-          '<div class="conv-file-snippet old">' + escHtml(fd.old) + '</div>';
+
+      // Context line for Edit operations
+      if (fTool === "edit" && (fd.linesChanged || fd.className || fd.fnName)) {
+        var verb = fd.isInsert ? "Inserted" : "Replaced";
+        var n = fd.linesChanged || 1;
+        var ctx = verb + " " + n + " line" + (n === 1 ? "" : "s");
+        var fnWord = (fd.ext === "ex" || fd.ext === "exs") ? "def" : "function";
+        if (fd.className) ctx += " in class " + fd.className;
+        if (fd.fnName) ctx += ", " + fnWord + " " + fd.fnName;
+        if (fd.startLine) ctx += " (line " + fd.startLine + ")";
+        inner += '<div class="conv-file-context">' + escHtml(ctx) + '</div>';
       }
-      if (fd.new) {
-        inner += '<div class="conv-file-section-label">with</div>' +
-          '<div class="conv-file-snippet new">' + escHtml(fd.new) + '</div>';
-      }
-      if (fd.preview) {
+
+      // Side-by-side diff for Edit (old + new), stacked for Write (preview)
+      if ((fd.old != null || fd.new != null) && fTool === "edit") {
+        inner += '<div class="conv-file-diff">';
+        inner += '<div class="conv-file-diff-col">' +
+          '<div class="conv-file-section-label">replaced</div>' +
+          '<div class="conv-file-snippet old">' + escHtml(fd.old || "") + '</div>' +
+          '</div>';
+        inner += '<div class="conv-file-diff-col">' +
+          '<div class="conv-file-section-label">with</div>' +
+          '<div class="conv-file-snippet new">' + escHtml(fd.new || "") + '</div>' +
+          '</div>';
+        inner += '</div>';
+      } else if (fd.preview) {
         inner += '<div class="conv-file-section-label">' + (fd.lines ? fd.lines + ' lines' : 'content') + '</div>' +
           '<div class="conv-file-snippet content">' + escHtml(fd.preview) + '</div>';
       }
+
       inner += '</div>';
     }
     var html = '<div class="conv-file">' + inner + '</div>';
@@ -345,13 +383,8 @@ function renderWelcomeContent() {
 function renderConversationContent() {
   var items = state.conversationItems || [];
   if (items.length === 0) {
-    // Show welcome screen when idle / watching
-    if (state.welcomeText && (state.status === "watching" || state.status === "idle") && !state.featureName) {
-      return renderWelcomeContent();
-    }
     return '<div class="empty-state">(waiting for feature processing\u2026)</div>';
   }
-
   return ConversationBlockRenderer.renderAll(items, "live");
 }
 
@@ -519,6 +552,16 @@ function startRuntimeTimer() {
 // ---------------------------------------------------------------------------
 
 function updateDOM() {
+  // Auto-navigate to processing view when a feature starts
+  var justStarted = state.featureName !== null && _prevFeatureName === null;
+  _prevFeatureName = state.featureName;
+  if (justStarted && currentView !== "processing") {
+    showProcessingView();
+  }
+
+  // Keep processing nav item in sync
+  updateProcessingNavItem();
+
   if ($botStatus) {
     $botStatus.textContent = state.status.toUpperCase();
     $botStatus.className = "badge badge-" + state.status;
@@ -659,8 +702,24 @@ function initResizeHandles() {
   makeDraggable("drag-main", "panels-left", "horizontal");
   // Feature Status height within right column
   makeDraggable("drag-status-fileops", "panel-status", "vertical");
-  // File Operations height within right column
-  makeDraggable("drag-fileops-plan", "panel-fileops", "vertical");
+}
+
+// ---------------------------------------------------------------------------
+// Plan / File Operations tab switching
+// ---------------------------------------------------------------------------
+
+function switchPlanFileopsTab(tabName) {
+  var planTab     = document.getElementById("tab-plan");
+  var fileopsTab  = document.getElementById("tab-fileops");
+  var planContent    = document.getElementById("plan-content");
+  var fileopsContent = document.getElementById("fileops-content");
+  if (!planTab || !fileopsTab || !planContent || !fileopsContent) return;
+
+  var showPlan = tabName === "plan";
+  planTab.classList.toggle("active", showPlan);
+  fileopsTab.classList.toggle("active", !showPlan);
+  planContent.style.display    = showPlan ? "" : "none";
+  fileopsContent.style.display = showPlan ? "none" : "";
 }
 
 // ---------------------------------------------------------------------------
@@ -707,11 +766,19 @@ function connectWebSocket() {
         handleNpmMessage(msg);
       } else if (msg.type === "npm-scripts-updated") {
         loadNpmScripts();
+      } else if (msg.type === "features-updated") {
+        if (currentView === "features") {
+          loadFeaturesData();
+        } else if (currentView === "dashboard") {
+          loadDashboardStats();
+        }
       } else if (msg.type === "todo-updated" || msg.type === "project-activated") {
         loadTodoNavItem();
       } else if (msg.type === "project-deactivated") {
         // Server has returned to "waiting" state — reload to show project selection
         window.location.reload();
+      } else if (msg.type === "clarify-request") {
+        showClarifyModal(msg.question || "");
       }
     } catch (e) {
       // Ignore malformed messages
@@ -1356,35 +1423,172 @@ function loadTodoNavItem() {
 // View switching — Dashboard / Features / Command / Settings
 // ---------------------------------------------------------------------------
 
-var currentView = "dashboard";
+var currentView = "welcome";
+
+// Track previous featureName to detect when processing starts
+var _prevFeatureName = null;
 
 function hideAllViews() {
+  var welcome = document.getElementById("welcome-view");
+  var dashView = document.getElementById("dashboard-view");
   var dock = document.getElementById("dock-container");
   var featuresView = document.getElementById("features-view");
   var commandView = document.getElementById("command-view");
   var settingsView = document.getElementById("settings-view");
+  if (welcome) welcome.style.display = "none";
+  if (dashView) dashView.style.display = "none";
   if (dock) dock.style.display = "none";
   if (featuresView) featuresView.style.display = "none";
   if (commandView) commandView.style.display = "none";
   if (settingsView) settingsView.style.display = "none";
   var navDash = document.getElementById("nav-dashboard");
+  var navProcessing = document.getElementById("nav-processing");
   var navFeatures = document.getElementById("nav-features");
   var navSettings = document.getElementById("nav-settings");
   var navCodereview = document.getElementById("nav-codereview");
   if (navDash) navDash.classList.remove("active");
+  if (navProcessing) { navProcessing.classList.remove("active"); navProcessing.classList.remove("complete"); }
   if (navFeatures) navFeatures.classList.remove("active");
   if (navSettings) navSettings.classList.remove("active");
   if (navCodereview) navCodereview.classList.remove("active");
 }
 
+function showWelcomeView() {
+  hideAllViews();
+  var welcome = document.getElementById("welcome-view");
+  if (welcome) {
+    welcome.style.display = "";
+    var content = document.getElementById("welcome-content");
+    if (content) content.innerHTML = renderWelcomeContent();
+  }
+  currentView = "welcome";
+  updateNpmCommandsListActive(null);
+}
+
 function showDashboardView() {
   hideAllViews();
-  var dock = document.getElementById("dock-container");
-  if (dock) dock.style.display = "";
+  var dashView = document.getElementById("dashboard-view");
+  if (dashView) dashView.style.display = "";
   currentView = "dashboard";
   var navDash = document.getElementById("nav-dashboard");
   if (navDash) navDash.classList.add("active");
   updateNpmCommandsListActive(null);
+  loadDashboardStats();
+}
+
+function showProcessingView() {
+  hideAllViews();
+  var dock = document.getElementById("dock-container");
+  if (dock) dock.style.display = "";
+  currentView = "processing";
+  var navProcessing = document.getElementById("nav-processing");
+  if (navProcessing) {
+    var isActive = state.status === "processing";
+    navProcessing.classList.toggle("active", isActive);
+    navProcessing.classList.toggle("complete", !isActive);
+  }
+  updateNpmCommandsListActive(null);
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard stats
+// ---------------------------------------------------------------------------
+
+function formatNumber(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+  return String(n);
+}
+
+function loadDashboardStats() {
+  var content = document.getElementById("dashboard-content");
+  if (content) content.innerHTML = '<div class="empty-state">Loading stats\u2026</div>';
+  signedFetch("/api/stats")
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if (content) content.innerHTML = renderDashboardStats(data);
+    })
+    .catch(function () {
+      if (content) content.innerHTML = '<div class="dashboard-empty">Could not load statistics.</div>';
+    });
+}
+
+function renderDashboardStats(d) {
+  if (!d || d.totalFeatures === 0) {
+    return '<div class="dashboard-header">Dashboard</div>' +
+           '<div class="dashboard-empty">No features processed yet.<br>Create a feature to get started.</div>';
+  }
+
+  var successRate = d.totalFeatures > 0
+    ? Math.round((d.successCount / d.totalFeatures) * 100)
+    : 0;
+  var totalTokens = (d.totalTokensIn || 0) + (d.totalTokensOut || 0);
+
+  function tile(icon, value, label, accent) {
+    return '<div class="dashboard-tile' + (accent ? ' accent-' + accent : '') + '">' +
+      '<div class="dashboard-tile-icon">' + icon + '</div>' +
+      '<div class="dashboard-tile-value">' + escHtml(String(value)) + '</div>' +
+      '<div class="dashboard-tile-label">' + escHtml(label) + '</div>' +
+    '</div>';
+  }
+
+  var html = '<div class="dashboard-header">Dashboard</div>' +
+    '<div class="dashboard-subheader">Feature processing summary for this project</div>';
+
+  html += '<div class="dashboard-section-title">Activity</div>';
+  html += '<div class="dashboard-tiles">' +
+    tile('📊', d.totalFeatures, 'Total Features', '') +
+    tile('📅', d.featuresThisWeek, 'This Week', 'blue') +
+    tile('🔥', d.featuresToday, 'Today', 'amber') +
+    tile('✅', successRate + '%', 'Success Rate', successRate >= 80 ? 'green' : 'amber') +
+  '</div>';
+
+  html += '<div class="dashboard-section-title">Tokens</div>';
+  html += '<div class="dashboard-tiles">' +
+    tile('🔡', formatNumber(totalTokens), 'Total Tokens', '') +
+    tile('📥', formatNumber(d.totalTokensIn || 0), 'Tokens In', '') +
+    tile('📤', formatNumber(d.totalTokensOut || 0), 'Tokens Out', '') +
+    tile('💾', formatNumber(d.totalCacheTokens || 0), 'Cache Tokens', 'blue') +
+  '</div>';
+
+  html += '<div class="dashboard-section-title">Cost</div>';
+  html += '<div class="dashboard-tiles">' +
+    tile('💰', '$' + (d.totalCostUsd || 0).toFixed(2), 'Total Spend', 'green') +
+    tile('📉', '$' + (d.avgCostUsd || 0).toFixed(4), 'Avg per Feature', '') +
+    tile('🔄', Math.round(d.avgTurns || 0), 'Avg Turns', '') +
+  '</div>';
+
+  return html;
+}
+
+// ---------------------------------------------------------------------------
+// Processing nav item — show/hide and label based on state
+// ---------------------------------------------------------------------------
+
+function updateProcessingNavItem() {
+  var navItem = document.getElementById("nav-processing-item");
+  var navEl = document.getElementById("nav-processing");
+  var iconEl = document.getElementById("nav-processing-icon");
+  var labelEl = document.getElementById("nav-processing-label");
+  if (!navItem) return;
+
+  var hasFeature = state.featureName !== null || state.followupFeatureId !== null;
+  navItem.style.display = hasFeature ? "" : "none";
+
+  if (!hasFeature) return;
+
+  var isProcessing = state.status === "processing";
+  if (iconEl) {
+    iconEl.innerHTML = isProcessing ? '&#x2699;&#xFE0F;' : '&#x2705;';
+    iconEl.classList.toggle("nav-icon-spin", isProcessing);
+  }
+  if (labelEl) labelEl.textContent = isProcessing ? "Processing" : "Finished";
+
+  // Keep active state if on processing view
+  if (navEl && currentView === "processing") {
+    navEl.classList.toggle("active", isProcessing);
+    navEl.classList.toggle("complete", !isProcessing);
+  }
 }
 
 function showFeaturesView() {
@@ -1396,7 +1600,8 @@ function showFeaturesView() {
   if (navFeatures) navFeatures.classList.add("active");
   updateNpmCommandsListActive(null);
   loadFeaturesData();
-  makeDraggable("drag-features", "panel-pending", "vertical");
+  makeDraggable("drag-pending-hold", "panel-pending", "horizontal");
+  makeDraggable("drag-features", "features-top-panels", "vertical");
 }
 
 // ---------------------------------------------------------------------------
@@ -1535,13 +1740,32 @@ function formatDate(isoString) {
 }
 
 function renderPendingFeatures(items) {
-  if (!items || items.length === 0) {
+  var pending = (items || []).filter(function (i) { return i.status === "pending"; });
+  if (pending.length === 0) {
     return '<div class="empty-state">(no pending features)</div>';
   }
-  return items.map(function (item) {
+  return pending.map(function (item) {
     return (
       '<div class="feature-list-item">' +
-        '<span class="feature-list-badge ' + escHtml(item.status) + '">' + escHtml(item.status) + '</span>' +
+        '<span class="feature-list-badge pending">pending</span>' +
+        '<div class="feature-list-body">' +
+          '<div class="feature-list-title">' + escHtml(item.title) + '</div>' +
+          '<div class="feature-list-meta">' + escHtml(item.filename) + '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join("");
+}
+
+function renderHoldFeatures(items) {
+  var hold = (items || []).filter(function (i) { return i.status === "hold"; });
+  if (hold.length === 0) {
+    return '<div class="empty-state">(no backlog features)</div>';
+  }
+  return hold.map(function (item) {
+    return (
+      '<div class="feature-list-item" draggable="true" data-filename="' + escHtml(item.filename) + '" title="Drag to Pending to queue for processing">' +
+        '<span class="feature-list-badge hold">hold</span>' +
         '<div class="feature-list-body">' +
           '<div class="feature-list-title">' + escHtml(item.title) + '</div>' +
           '<div class="feature-list-meta">' + escHtml(item.filename) + '</div>' +
@@ -1864,6 +2088,108 @@ function closeFollowupSession() {
 }
 
 // ---------------------------------------------------------------------------
+// Clarification modal — shown when the agent needs a user response
+// ---------------------------------------------------------------------------
+
+var _clarifyModal = null;
+
+function showClarifyModal(question) {
+  // Only one clarify modal at a time
+  if (_clarifyModal) return;
+
+  var TIMEOUT_SEC = 60;
+  var remaining = TIMEOUT_SEC;
+  var timerInterval = null;
+  var userStartedTyping = false;
+
+  var overlay = document.createElement("div");
+  overlay.className = "clarify-overlay";
+  overlay.id = "clarify-overlay";
+
+  overlay.innerHTML =
+    '<div class="clarify-modal">' +
+      '<div class="clarify-header">' +
+        '<span class="clarify-icon">&#x2753;</span>' +
+        '<span class="clarify-title">Agent needs clarification</span>' +
+        '<span class="clarify-countdown" id="clarify-countdown">' + remaining + 's</span>' +
+      '</div>' +
+      '<div class="clarify-question" id="clarify-question-text"></div>' +
+      '<textarea class="clarify-textarea" id="clarify-textarea" rows="4"' +
+        ' placeholder="Type your answer here\u2026"></textarea>' +
+      '<div class="clarify-actions">' +
+        '<button class="clarify-send-btn" id="clarify-send-btn">Send Answer</button>' +
+        '<button class="clarify-skip-btn" id="clarify-skip-btn">Skip (use best judgement)</button>' +
+      '</div>' +
+    '</div>';
+
+  // Set question text safely
+  overlay.querySelector("#clarify-question-text").textContent = question;
+
+  document.body.appendChild(overlay);
+  _clarifyModal = overlay;
+
+  var textarea = overlay.querySelector("#clarify-textarea");
+  var countdownEl = overlay.querySelector("#clarify-countdown");
+  var sendBtn = overlay.querySelector("#clarify-send-btn");
+  var skipBtn = overlay.querySelector("#clarify-skip-btn");
+
+  function sendAnswer(answer) {
+    clearInterval(timerInterval);
+    signedWsSend({ type: "clarify-response", answer: answer });
+    closeClarifyModal();
+  }
+
+  // Countdown tick
+  timerInterval = setInterval(function () {
+    if (userStartedTyping) return;
+    remaining -= 1;
+    if (countdownEl) countdownEl.textContent = remaining + "s";
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      closeClarifyModal(); // server timeout fires its own fallback
+    }
+  }, 1000);
+
+  // Typing clears the countdown
+  textarea.addEventListener("input", function () {
+    if (!userStartedTyping) {
+      userStartedTyping = true;
+      clearInterval(timerInterval);
+      if (countdownEl) countdownEl.style.display = "none";
+    }
+  });
+
+  // Ctrl+Enter sends
+  textarea.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      var answer = textarea.value.trim();
+      if (answer) sendAnswer(answer);
+    }
+  });
+
+  sendBtn.addEventListener("click", function () {
+    var answer = textarea.value.trim();
+    if (answer) sendAnswer(answer);
+  });
+
+  skipBtn.addEventListener("click", function () {
+    clearInterval(timerInterval);
+    closeClarifyModal(); // server will use fallback since no clarify-response sent
+  });
+
+  // Focus textarea
+  setTimeout(function () { textarea.focus(); }, 50);
+}
+
+function closeClarifyModal() {
+  if (_clarifyModal) {
+    _clarifyModal.remove();
+    _clarifyModal = null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Feature detail — resume session follow-up
 // ---------------------------------------------------------------------------
 
@@ -1896,21 +2222,73 @@ function sendFdResumeMessage() {
 
 function loadFeaturesData() {
   var $pending = document.getElementById("pending-content");
+  var $hold = document.getElementById("hold-content");
   var $complete = document.getElementById("complete-features-content");
 
   if ($pending) $pending.innerHTML = '<div class="empty-state">Loading…</div>';
+  if ($hold) $hold.innerHTML = '<div class="empty-state">Loading…</div>';
   if ($complete) $complete.innerHTML = '<div class="empty-state">Loading…</div>';
 
   signedFetch("/api/features")
     .then(function (res) { return res.json(); })
     .then(function (data) {
       if ($pending) $pending.innerHTML = renderPendingFeatures(data.pending);
+      if ($hold) {
+        $hold.innerHTML = renderHoldFeatures(data.pending);
+        wireHoldDragAndDrop($hold, $pending);
+      }
       if ($complete) $complete.innerHTML = renderCompleteFeatures(data.complete);
     })
     .catch(function () {
       if ($pending) $pending.innerHTML = '<div class="empty-state">(error loading features)</div>';
+      if ($hold) $hold.innerHTML = '<div class="empty-state">(error loading features)</div>';
       if ($complete) $complete.innerHTML = '<div class="empty-state">(error loading features)</div>';
     });
+}
+
+function wireHoldDragAndDrop($holdContent, $pendingContent) {
+  // Wire drag start on each hold item
+  var items = $holdContent.querySelectorAll(".feature-list-item[draggable]");
+  for (var i = 0; i < items.length; i++) {
+    items[i].addEventListener("dragstart", function (e) {
+      e.dataTransfer.setData("text/plain", this.getAttribute("data-filename"));
+      e.dataTransfer.effectAllowed = "move";
+    });
+  }
+
+  // Wire drop target on the pending panel content
+  if (!$pendingContent) return;
+
+  $pendingContent.addEventListener("dragover", function (e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    $pendingContent.classList.add("drag-over");
+  });
+
+  $pendingContent.addEventListener("dragleave", function (e) {
+    if (!$pendingContent.contains(e.relatedTarget)) {
+      $pendingContent.classList.remove("drag-over");
+    }
+  });
+
+  $pendingContent.addEventListener("drop", function (e) {
+    e.preventDefault();
+    $pendingContent.classList.remove("drag-over");
+    var filename = e.dataTransfer.getData("text/plain");
+    if (!filename) return;
+    signedFetch("/api/features/move-to-pending", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: filename }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          loadFeaturesData();
+        }
+      })
+      .catch(function () {});
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -2637,6 +3015,13 @@ document.addEventListener("keydown", function (e) {
 });
 
 document.addEventListener("click", function (e) {
+  // Plan / File Operations tab switching
+  var panelTab = e.target.closest ? e.target.closest("[data-panel-tab]") : null;
+  if (panelTab) {
+    var tabName = panelTab.getAttribute("data-panel-tab");
+    if (tabName) switchPlanFileopsTab(tabName);
+  }
+
   var trigger = document.getElementById("model-trigger");
   if (trigger && trigger.contains(e.target)) {
     e.preventDefault();
@@ -2659,6 +3044,12 @@ document.addEventListener("click", function (e) {
   if (navDash && navDash.contains(e.target)) {
     e.preventDefault();
     showDashboardView();
+  }
+
+  var navProcessing = document.getElementById("nav-processing");
+  if (navProcessing && navProcessing.contains(e.target)) {
+    e.preventDefault();
+    showProcessingView();
   }
 
   var navFeatures = document.getElementById("nav-features");
@@ -2811,10 +3202,23 @@ document.addEventListener("click", function (e) {
 // Initialization
 // ---------------------------------------------------------------------------
 
+showWelcomeView();
+
 signedFetch("/api/state")
   .then(function (res) { return res.json(); })
   .then(function (data) {
     state = Object.assign({}, state, data);
+    // If a feature is already in progress when we load, go straight to processing view
+    if (state.featureName !== null) {
+      _prevFeatureName = state.featureName;
+      showProcessingView();
+    } else {
+      // Refresh welcome content with the loaded state (welcomeText, etc.)
+      if (currentView === "welcome") {
+        var wc = document.getElementById("welcome-content");
+        if (wc) wc.innerHTML = renderWelcomeContent();
+      }
+    }
     updateDOM();
   })
   .catch(function () {

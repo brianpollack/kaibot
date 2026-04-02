@@ -116,6 +116,27 @@ The following applies to front end design (UI, Web UI, etc)
 - Use common CSS elements.  Use SCSS when possible.  Always check for similar component styles such as panels, buttons, and windows before creating new styles
 - Implement full screen reader compatibility and accessibility standards
 
+
+## New Project Initialization
+
+When no project files exist in a folder, make sure to initialize common support files, even if empty.
+That would include env files, package.json for any node related, and python virtual environment.  Unless
+someone asks specifically not to have features, use the best case recomendations.  For example, if someone
+asks for a website, use Node, Typescript, Vite, React, Tailwinds, Eslint, etc.   If someone wants python,
+setup the virtual environment, dependencies, etc.   Provide a solid foundation for every project.
+
+## Clarification Protocol
+
+If you have a critical question that must be answered before you can implement correctly:
+
+1. Output this marker on its own line: `CLARIFY: <your question>`
+2. Do NOT make any file changes in the same turn — only ask
+3. Stop immediately after the CLARIFY line
+4. You will receive the answer in a follow-up message; then proceed with implementation
+
+Only use CLARIFY when the ambiguity would cause you to make a fundamentally wrong implementation decision.
+Do not use it for minor style or naming decisions you can resolve from context.
+
 ## Final Rule
 
 Write code that a senior engineer would confidently approve in a production code review.

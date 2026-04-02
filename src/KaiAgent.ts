@@ -1,5 +1,5 @@
-import { appendFileSync, readFileSync } from "fs";
-import { basename } from "path";
+import { appendFileSync, existsSync, readFileSync } from "fs";
+import { basename, extname } from "path";
 
 import type { SDKAssistantMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 
@@ -88,7 +88,6 @@ export async function processFeature(
   existingClient?: KaiClient,
 ): Promise<AgentStats> {
   const client = existingClient ?? KaiClient.create(projectDir, model, options.provider);
-  const prompt = buildPrompt(feature, projectDir);
   const startTime = Date.now();
 
   uiStore.startConversation();
@@ -97,112 +96,262 @@ export async function processFeature(
   uiStore.setFeatureStartTime(startTime);
   uiStore.setStatusMessage(`Starting feature: ${feature.name}`);
 
+  // These persist across clarification rounds
   let hasSeenToolUse = false;
   let hasSeenEdit = false;
   let hasNotifiedPlan = false;
   let sessionId: string | undefined;
 
-  for await (const msg of client.query(prompt)) {
-    // Capture session ID from any message (all SDK messages carry it)
-    if (!sessionId && (msg as Record<string, unknown>).session_id) {
-      sessionId = (msg as Record<string, unknown>).session_id as string;
-    }
-    // Stream assistant text and log tool calls
-    if (msg.type === "assistant") {
-      const { message } = msg as SDKAssistantMessage;
-      for (const block of message.content) {
-        const b = block as unknown as Record<string, unknown>;
-        if (b.type === "text" && typeof b.text === "string") {
-          // Transition to "thinking" once the agent starts producing text
-          if (!hasSeenToolUse) {
-            uiStore.setFeatureStage("thinking");
+  // Accumulated stats across all rounds (including clarification turns)
+  let accCostUsd = 0;
+  let accTurns = 0;
+  let accTokensIn = 0;
+  let accTokensOut = 0;
+  let accCacheRead = 0;
+  let accCacheWrite = 0;
+
+  // First round uses the full feature prompt; clarification rounds send the answer
+  let queryPrompt: string = buildPrompt(feature, projectDir);
+
+  // Outer loop: re-runs the agent after each clarification exchange
+  while (true) {
+    let clarifyQuestion: string | undefined;
+    let accumulatedText = "";
+
+    for await (const msg of client.query(queryPrompt, sessionId)) {
+      // Capture session ID (needed to resume the session for follow-up queries)
+      if (!sessionId && (msg as Record<string, unknown>).session_id) {
+        sessionId = (msg as Record<string, unknown>).session_id as string;
+      }
+
+      if (msg.type === "assistant") {
+        const { message } = msg as SDKAssistantMessage;
+        for (const block of message.content) {
+          const b = block as unknown as Record<string, unknown>;
+          if (b.type === "text" && typeof b.text === "string") {
+            if (!hasSeenToolUse) uiStore.setFeatureStage("thinking");
+            if (b.text.includes("## Plan")) uiStore.setFeatureStage("planning");
+            uiStore.appendThinking(b.text);
+            uiStore.pushConversationThinking(b.text);
+
+            // Accumulate to detect CLARIFY across streamed chunks
+            accumulatedText += b.text;
+            if (!clarifyQuestion) {
+              const m = accumulatedText.match(CLARIFY_RE);
+              if (m) clarifyQuestion = m[1].trim();
+            }
+          } else if (b.type === "tool_use" && typeof b.name === "string") {
+            hasSeenToolUse = true;
+            if (!hasSeenEdit && (b.name === "Edit" || b.name === "Write")) {
+              hasSeenEdit = true;
+              uiStore.setFeatureStage("executing");
+            }
+            if (!hasSeenEdit && (b.name === "Read" || b.name === "Glob" || b.name === "Grep")) {
+              uiStore.setFeatureStage("reading");
+            }
+            const input = b.input as Record<string, unknown> | undefined;
+            routeToolUse(b.name, input);
           }
-          // Detect plan section being written
-          if (b.text.includes("## Plan")) {
-            uiStore.setFeatureStage("planning");
-          }
-          uiStore.appendThinking(b.text);
-          uiStore.pushConversationThinking(b.text);
-        } else if (b.type === "tool_use" && typeof b.name === "string") {
-          hasSeenToolUse = true;
-          // Transition to "executing" once edits/writes start (past planning)
-          if (!hasSeenEdit && (b.name === "Edit" || b.name === "Write")) {
-            hasSeenEdit = true;
-            uiStore.setFeatureStage("executing");
-          }
-          // Stay in "reading" stage while only reading files
-          if (!hasSeenEdit && (b.name === "Read" || b.name === "Glob" || b.name === "Grep")) {
-            uiStore.setFeatureStage("reading");
-          }
-          const input = b.input as Record<string, unknown> | undefined;
-          routeToolUse(b.name, input);
         }
       }
-    }
 
-    // After each message, refresh plan lines from the feature file
-    refreshPlanLines(feature.filePath);
-    if (!hasNotifiedPlan && options.onPlanCreated) {
-      const planSection = readPlanSection(feature.filePath);
-      if (planSection) {
-        hasNotifiedPlan = true;
-        try {
-          await options.onPlanCreated(planSection);
-        } catch (err) {
-          const errMsg = err instanceof Error ? err.message : String(err);
-          console.warn(`[KaiAgent] Failed to send plan callback: ${errMsg}`);
+      refreshPlanLines(feature.filePath);
+      if (!hasNotifiedPlan && options.onPlanCreated) {
+        const planSection = readPlanSection(feature.filePath);
+        if (planSection) {
+          hasNotifiedPlan = true;
+          try {
+            await options.onPlanCreated(planSection);
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            console.warn(`[KaiAgent] Failed to send plan callback: ${errMsg}`);
+          }
         }
       }
-    }
 
-    // Handle completion
-    if (msg.type === "result") {
-      const result = msg as SDKResultMessage;
-      if (result.subtype !== "success") {
-        uiStore.setStatusMessage(
-          `Feature failed (${result.subtype}): ${result.errors.join(", ")}`,
+      if (msg.type === "result") {
+        const result = msg as SDKResultMessage;
+
+        if (result.subtype !== "success") {
+          uiStore.setStatusMessage(
+            `Feature failed (${result.subtype}): ${result.errors.join(", ")}`,
+          );
+          throw new Error(
+            `[KaiAgent] Feature failed (${result.subtype}): ${result.errors.join(", ")}`,
+          );
+        }
+
+        // Accumulate stats for this round
+        accCostUsd += result.total_cost_usd;
+        accTurns += result.num_turns;
+        accTokensIn += result.usage.input_tokens;
+        accTokensOut += result.usage.output_tokens;
+        accCacheRead += result.usage.cache_read_input_tokens ?? 0;
+        accCacheWrite += result.usage.cache_creation_input_tokens ?? 0;
+
+        // If the agent asked for clarification, break inner loop to handle it
+        if (clarifyQuestion) break;
+
+        // Normal completion path
+        uiStore.setFeatureStage("complete");
+        const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
+        const costStr = `$${accCostUsd.toFixed(4)}`;
+        const costInfo = `Cost: ${costStr}  Turns: ${accTurns}  Time: ${elapsedSec}s`;
+        uiStore.setStatusMessage(`Done — ${costInfo}`);
+        uiStore.setPlanCostInfo(costInfo);
+        uiStore.completeConversationCommand();
+        uiStore.pushConversationSystem(`✅ Feature complete — ${costInfo}`);
+        appendFileSync(
+          feature.filePath,
+          `\n## Metadata\n\n- **Model:** ${model}\n- **Cost:** ${costStr}\n- **Turns:** ${accTurns}\n- **Time:** ${elapsedSec}s\n`,
         );
-        throw new Error(
-          `[KaiAgent] Feature failed (${result.subtype}): ${result.errors.join(", ")}`,
-        );
+
+        const planPoints = parsePlanLines(safeReadFileContent(feature.filePath)).map((l) => l.text);
+        return {
+          durationMs: Date.now() - startTime,
+          totalCostUsd: accCostUsd,
+          numTurns: accTurns,
+          tokensIn: accTokensIn,
+          tokensOut: accTokensOut,
+          cacheReadTokens: accCacheRead,
+          cacheWriteTokens: accCacheWrite,
+          planPoints,
+          sessionId,
+        };
       }
-      uiStore.setFeatureStage("complete");
-      const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
-      const costStr = `$${result.total_cost_usd.toFixed(4)}`;
-      const costInfo = `Cost: ${costStr}  Turns: ${result.num_turns}  Time: ${elapsedSec}s`;
-      uiStore.setStatusMessage(`Done — ${costInfo}`);
-      uiStore.setPlanCostInfo(costInfo);
-      uiStore.completeConversationCommand();
-      uiStore.pushConversationSystem(`✅ Feature complete — ${costInfo}`);
-      appendFileSync(
-        feature.filePath,
-        `\n## Metadata\n\n- **Model:** ${model}\n- **Cost:** ${costStr}\n- **Turns:** ${result.num_turns}\n- **Time:** ${elapsedSec}s\n`,
-      );
-
-      const planPoints = parsePlanLines(safeReadFileContent(feature.filePath)).map((l) => l.text);
-      return {
-        durationMs: result.duration_ms,
-        totalCostUsd: result.total_cost_usd,
-        numTurns: result.num_turns,
-        tokensIn: result.usage.input_tokens,
-        tokensOut: result.usage.output_tokens,
-        cacheReadTokens: result.usage.cache_read_input_tokens ?? 0,
-        cacheWriteTokens: result.usage.cache_creation_input_tokens ?? 0,
-        planPoints,
-        sessionId,
-      };
     }
+
+    if (!clarifyQuestion) {
+      // Stream ended without a result — should not happen normally
+      throw new Error("[KaiAgent] Stream ended without a result message");
+    }
+
+    // Pause and ask the user; fall back if no browser client responds in time
+    const answer = await requestClarification(clarifyQuestion);
+    queryPrompt = answer;
+    // sessionId is already set — next query() call will resume the same session
   }
-
-  // Should not be reachable — SDK always emits a result message
-  throw new Error("[KaiAgent] Stream ended without a result message");
 }
 
 // ---------------------------------------------------------------------------
 // Route tool-use blocks to the appropriate UI panels
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Clarification request — pauses feature processing to ask the user a question
+// ---------------------------------------------------------------------------
+
+const CLARIFY_FALLBACK = "User is not available, follow your best judgement";
+const CLARIFY_TIMEOUT_MS = 60_000;
+const CLARIFY_RE = /(?:^|\n)CLARIFY:\s*(.+?)(?:\n|$)/;
+
+/**
+ * Emits a clarify-request event on uiStore (picked up by wsHandler and
+ * broadcast to any connected browser clients), then waits up to
+ * CLARIFY_TIMEOUT_MS for a clarify-response event.  Falls back to
+ * CLARIFY_FALLBACK if no answer arrives in time.
+ *
+ * This function is a no-op for Ink/CLI users — they never emit
+ * clarify-response, so the timeout path always fires.
+ */
+async function requestClarification(question: string): Promise<string> {
+  uiStore.pushConversationClarifyQuestion(question);
+  uiStore.emit("clarify-request", { question });
+
+  return new Promise<string>((resolve) => {
+    const timer = setTimeout(() => {
+      uiStore.off("clarify-response", handler);
+      const fallback = `${CLARIFY_FALLBACK} (no response after ${CLARIFY_TIMEOUT_MS / 1000}s)`;
+      uiStore.pushConversationClarifyAnswer(fallback);
+      resolve(CLARIFY_FALLBACK);
+    }, CLARIFY_TIMEOUT_MS);
+
+    function handler(answer: string) {
+      clearTimeout(timer);
+      uiStore.pushConversationClarifyAnswer(answer);
+      resolve(answer);
+    }
+
+    uiStore.once("clarify-response", handler);
+  });
+}
+
 const FILE_TOOLS = new Set(["Read", "Write", "Edit"]);
+
+// ---------------------------------------------------------------------------
+// Edit context — find enclosing class/function by scanning backwards
+// ---------------------------------------------------------------------------
+
+interface EditContext {
+  startLine: number;
+  className: string;
+  fnName: string;
+  linesChanged: number;
+  isInsert: boolean;
+  ext: string;
+}
+
+function getEditContext(filePath: string, oldString: string, newString: string): EditContext {
+  const isInsert = oldString === "";
+  const linesChanged = isInsert
+    ? newString.split("\n").length
+    : oldString.split("\n").length;
+  const ext = extname(filePath).toLowerCase().replace(".", "");
+  const ctx: EditContext = { startLine: 0, className: "", fnName: "", linesChanged, isInsert, ext };
+
+  if (!existsSync(filePath)) return ctx;
+  let content: string;
+  try { content = readFileSync(filePath, "utf-8"); } catch { return ctx; }
+
+  const searchStr = oldString || newString;
+  const idx = searchStr ? content.indexOf(searchStr) : -1;
+  const scanContent = idx !== -1 ? content.slice(0, idx) : content;
+  if (idx !== -1) {
+    ctx.startLine = scanContent.split("\n").length; // 1-based
+  }
+
+  const lines = scanContent.split("\n");
+
+  let classPat: RegExp;
+  let fnPat: RegExp;
+
+  if (ext === "ex" || ext === "exs") {
+    classPat = /^\s*defmodule\s+([\w.]+)\s+do/;
+    fnPat = /^\s*defp?\s+(\w+)\s*[\s(]/;
+  } else if (ext === "py") {
+    classPat = /^\s*class\s+(\w+)\s*[(:]/;
+    fnPat = /^\s*(?:async\s+)?def\s+(\w+)\s*\(/;
+  } else {
+    // JS / TS / TSX
+    classPat = /(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/;
+    // Three sub-patterns: named function keyword, access-modified method, bare method
+    fnPat = new RegExp(
+      [
+        // function foo( / async function foo( / export function foo(
+        "(?:export\\s+)?(?:async\\s+)?function\\s*\\*?\\s*(\\w+)\\s*[(<]",
+        // public/private/etc. method: public async foo(
+        "(?:(?:public|private|protected|static|override|get|set)\\s+)+(?:async\\s+)?(\\w+)\\s*[(<]",
+        // bare method definition: foo( ... ) { or foo( ... ): ReturnType {
+        "^\\s*(?:async\\s+)?(\\w+)\\s*\\(",
+      ].join("|"),
+    );
+  }
+
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (!ctx.fnName) {
+      const m = line.match(fnPat);
+      if (m) ctx.fnName = (m[1] ?? m[2] ?? m[3] ?? m[4] ?? "").trim();
+    }
+    if (!ctx.className) {
+      const m = line.match(classPat);
+      if (m) ctx.className = (m[1] ?? "").trim();
+    }
+    if (ctx.fnName && ctx.className) break;
+  }
+
+  return ctx;
+}
 
 export function routeToolUse(name: string, input: Record<string, unknown> | undefined): void {
   if (name === "Bash") {
@@ -224,14 +373,24 @@ export function routeToolUse(name: string, input: Record<string, unknown> | unde
     // Record Write/Edit events in the conversation timeline, skipping features/ tracking files
     const inFeaturesDir = /[/\\]features[/\\]|^features[/\\]/.test(filePath);
     if (!inFeaturesDir && name === "Edit") {
-      const oldStr = typeof input?.old_string === "string" ? input.old_string.slice(0, 400) : "";
-      const newStr = typeof input?.new_string === "string" ? input.new_string.slice(0, 400) : "";
-      uiStore.pushConversationFileOp("Edit", filePath, { old: oldStr, new: newStr });
+      const oldStr = typeof input?.old_string === "string" ? input.old_string : "";
+      const newStr = typeof input?.new_string === "string" ? input.new_string : "";
+      const ctx = getEditContext(filePath, oldStr, newStr);
+      uiStore.pushConversationFileOp("Edit", filePath, {
+        old: oldStr,
+        new: newStr,
+        startLine: ctx.startLine,
+        className: ctx.className,
+        fnName: ctx.fnName,
+        linesChanged: ctx.linesChanged,
+        isInsert: ctx.isInsert,
+        ext: ctx.ext,
+      });
     } else if (!inFeaturesDir && name === "Write") {
       const content = typeof input?.content === "string" ? input.content : "";
       const lines = content.split("\n").length;
       uiStore.pushConversationFileOp("Write", filePath, {
-        preview: content.slice(0, 400),
+        preview: content,
         lines,
       });
     }

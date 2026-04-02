@@ -22,7 +22,7 @@ vi.mock("../featureDb.js", () => ({
 }));
 
 vi.mock("../web/followupSession.js", () => ({
-  registerSession: vi.fn((_featureId: string, _client: unknown, _logPath: string, onClose: () => void) => {
+  registerSession: vi.fn((_featureId: string, _client: unknown, _logPath: string, _projectDir: string, onClose: () => void) => {
     onClose();
   }),
   closeSession: vi.fn(),

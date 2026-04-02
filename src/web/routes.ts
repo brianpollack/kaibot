@@ -1,5 +1,5 @@
 import { execFileSync } from "child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "fs";
 import { type IncomingMessage, type ServerResponse } from "http";
 import { homedir } from "os";
 import { extname, join, resolve } from "path";
@@ -531,6 +531,16 @@ export function handleRequest(
     return;
   }
 
+  // ── API: feature statistics ───────────────────────────────────────
+  if (pathname === "/api/stats" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
+    const logDir = join(server.projectDir!, "features", "log");
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+    res.end(JSON.stringify(computeStats(logDir)));
+    return;
+  }
+
   // ── API: features list (pending + complete) ────────────────────────
   if (pathname === "/api/features" && req.method === "GET") {
     if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
@@ -632,6 +642,8 @@ export function handleRequest(
         // Clear any stale thinking lines and stream new ones via WebSocket
         uiStore.clearThinking();
         let response = "";
+        let assistResult: SDKResultMessage | null = null;
+        const assistStart = Date.now();
         for await (const msg of client.query(prompt)) {
           if (msg.type === "assistant") {
             const { message } = msg as SDKAssistantMessage;
@@ -647,6 +659,7 @@ export function handleRequest(
             const result = msg as SDKResultMessage;
             if (result.subtype === "success") {
               response = result.result;
+              assistResult = result;
             } else {
               throw new Error(`Query failed (${result.subtype}): ${result.errors.join(", ")}`);
             }
@@ -656,6 +669,24 @@ export function handleRequest(
 
         // Parse the response — expect FEATURE TITLE: and DESCRIPTION: sections
         const parsed = parseFeatureAssistResponse(response);
+
+        // Append accounting note to the description shown in the editor
+        if (assistResult) {
+          const totalMs = Date.now() - assistStart;
+          const totalSec = Math.round(totalMs / 1000);
+          const mins = Math.floor(totalSec / 60);
+          const secs = totalSec % 60;
+          const duration = mins > 0
+            ? `${mins} minute${mins !== 1 ? "s" : ""}, ${secs} second${secs !== 1 ? "s" : ""}`
+            : `${secs} second${secs !== 1 ? "s" : ""}`;
+          const totalTokens = assistResult.usage.input_tokens + assistResult.usage.output_tokens;
+          const tokenStr = totalTokens >= 1000
+            ? `${(totalTokens / 1000).toFixed(1)}k`
+            : String(totalTokens);
+          const cost = `$${assistResult.total_cost_usd.toFixed(2)}`;
+          parsed.description +=
+            `\n\n## Accounting Note\n\nKaiBot Assistant took ${duration}, used ${tokenStr} tokens, cost ${cost}`;
+        }
 
         res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
         res.end(JSON.stringify(parsed));
@@ -700,6 +731,41 @@ export function handleRequest(
 
         res.writeHead(201, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
         res.end(JSON.stringify({ id: featureId, title, hold, filePath: filePath }));
+      })
+      .catch(() => {
+        res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error: "Invalid request body" }));
+      });
+    return;
+  }
+
+  // ── API: move a hold feature to pending ──────────────────────────
+  if (pathname === "/api/features/move-to-pending" && req.method === "POST") {
+    readBody(req)
+      .then((body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        if (!requireProject(server, res)) return;
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const filename = String(data["filename"] ?? "").trim();
+
+        if (!filename || !filename.endsWith(".md") || filename.includes("/") || filename.includes("\\")) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: "Invalid filename" }));
+          return;
+        }
+
+        const holdPath = join(server.projectDir!, "features", "hold", filename);
+        const pendingPath = join(server.projectDir!, "features", filename);
+
+        if (!existsSync(holdPath)) {
+          res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: "File not found in hold folder" }));
+          return;
+        }
+
+        renameSync(holdPath, pendingPath);
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ ok: true, filename }));
       })
       .catch(() => {
         res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
@@ -826,6 +892,79 @@ interface CompleteFeature {
 interface FeaturesList {
   pending: PendingFeature[];
   complete: CompleteFeature[];
+}
+
+interface FeatureStats {
+  totalFeatures: number;
+  featuresThisWeek: number;
+  featuresToday: number;
+  successCount: number;
+  errorCount: number;
+  totalTokensIn: number;
+  totalTokensOut: number;
+  totalCacheTokens: number;
+  totalCostUsd: number;
+  avgCostUsd: number;
+  avgTurns: number;
+}
+
+/** Aggregate statistics from all feature log files in the given directory. */
+function computeStats(logDir: string): FeatureStats {
+  const stats: FeatureStats = {
+    totalFeatures: 0,
+    featuresThisWeek: 0,
+    featuresToday: 0,
+    successCount: 0,
+    errorCount: 0,
+    totalTokensIn: 0,
+    totalTokensOut: 0,
+    totalCacheTokens: 0,
+    totalCostUsd: 0,
+    avgCostUsd: 0,
+    avgTurns: 0,
+  };
+
+  if (!existsSync(logDir)) return stats;
+
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  let totalTurns = 0;
+
+  try {
+    for (const filename of readdirSync(logDir)) {
+      if (!filename.endsWith(".json")) continue;
+      try {
+        const raw = readFileSync(join(logDir, filename), "utf-8");
+        const record = JSON.parse(raw) as Record<string, unknown>;
+        stats.totalFeatures++;
+        if (String(record["status"] ?? "") === "success") stats.successCount++;
+        else stats.errorCount++;
+        const completedAt = String(record["completedAt"] ?? "");
+        if (completedAt) {
+          if (completedAt.startsWith(todayStr)) stats.featuresToday++;
+          if (new Date(completedAt) >= weekAgo) stats.featuresThisWeek++;
+        }
+        stats.totalTokensIn += Number(record["tokensIn"] ?? 0);
+        stats.totalTokensOut += Number(record["tokensOut"] ?? 0);
+        stats.totalCacheTokens +=
+          Number(record["cacheReadTokens"] ?? 0) + Number(record["cacheWriteTokens"] ?? 0);
+        stats.totalCostUsd += Number(record["totalCostUsd"] ?? 0);
+        totalTurns += Number(record["numTurns"] ?? 0);
+      } catch {
+        // Skip malformed files
+      }
+    }
+  } catch {
+    // Ignore unreadable directory
+  }
+
+  if (stats.totalFeatures > 0) {
+    stats.avgCostUsd = stats.totalCostUsd / stats.totalFeatures;
+    stats.avgTurns = totalTurns / stats.totalFeatures;
+  }
+
+  return stats;
 }
 
 /**

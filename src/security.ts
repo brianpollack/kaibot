@@ -31,6 +31,8 @@ const ALLOWED_UNIX = new Set([
   "node",
   "npm",
   "npx",
+  "pnpm",
+  "yarn",
   "tsx",
   "tsc",
   // Python
@@ -38,12 +40,14 @@ const ALLOWED_UNIX = new Set([
   "python3",
   "pip",
   "pip3",
+  "uv",
   // Git
   "git",
   // Elixir
   "mix",
   "elixir",
   "iex",
+  "hex",
   // Network (read-only)
   "curl",
   "wget",
@@ -84,6 +88,8 @@ const ALLOWED_WINDOWS = new Set([
   "node",
   "npm",
   "npx",
+  "pnpm",
+  "yarn",
   "tsx",
   "tsc",
   // Python
@@ -91,12 +97,14 @@ const ALLOWED_WINDOWS = new Set([
   "python3",
   "pip",
   "pip3",
+  "uv",
   // Git
   "git",
   // Elixir
   "mix",
   "elixir",
   "iex",
+  "hex",
   // Network (curl is built into Windows 10+)
   "curl",
   // Graphics (ImageMagick)

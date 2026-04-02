@@ -180,6 +180,17 @@ export function setupWebSocketHandler(
     }, 300);
   });
 
+  // When a follow-up conversation adds cost to a feature log, tell clients to
+  // refresh their features list so the updated total cost is displayed.
+  uiStore.on("features-updated", () => {
+    broadcastRaw({ type: "features-updated" });
+  });
+
+  // Forward clarification requests from the agent to all browser clients
+  uiStore.on("clarify-request", ({ question }: { question: string }) => {
+    broadcastRaw({ type: "clarify-request", question });
+  });
+
   // Subscribe to npm runner events if already available
   if (npmRunner) {
     wireNpmEvents(npmRunner);
@@ -229,6 +240,9 @@ export function setupWebSocketHandler(
         }
         if (msg.type === "feature-close" && typeof msg.featureId === "string") {
           closeSession(msg.featureId);
+        }
+        if (msg.type === "clarify-response" && typeof msg.answer === "string") {
+          uiStore.emit("clarify-response", msg.answer);
         }
         if (
           msg.type === "feature-resume" &&

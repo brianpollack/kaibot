@@ -97,3 +97,22 @@ export function appendFeatureRecord(projectDir: string, record: FeatureRecord): 
   records.push(record);
   writeFileSync(path, JSON.stringify(records, null, 2) + "\n");
 }
+
+/**
+ * Adds `extraCostUsd` to the `totalCostUsd` field of the record with the
+ * given `id` in `.kaibot/features.json`.  No-op if the record is not found.
+ */
+export function addFollowupCost(projectDir: string, id: string, extraCostUsd: number): void {
+  if (!extraCostUsd) return;
+  const path = dbPath(projectDir);
+  if (!existsSync(path)) return;
+  try {
+    const records = readDb(projectDir);
+    const record = records.find((r) => r.id === id);
+    if (!record) return;
+    record.totalCostUsd = (record.totalCostUsd ?? 0) + extraCostUsd;
+    writeFileSync(path, JSON.stringify(records, null, 2) + "\n");
+  } catch {
+    // Non-critical — don't crash on update failure
+  }
+}
