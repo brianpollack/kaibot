@@ -431,6 +431,8 @@ export class KaiBot {
 
       const displayName = featureTitle || feature.name;
       uiStore.setStatusMessage(`Complete: ${displayName} [${featureId}] — awaiting follow-up`);
+      uiStore.setFeatureEndTime(Date.now());
+      uiStore.setStatus("watching");
 
       // Keep the agent alive for follow-up prompts until the user closes the session
       uiStore.setFollowupFeatureId(featureId);

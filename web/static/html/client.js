@@ -86,6 +86,7 @@ let state = {
   featureName: null,
   featureStage: null,
   featureStartTime: null,
+  featureEndTime: null,
   thinkingLines: [],
   commands: [],
   fileOps: [],
@@ -135,9 +136,8 @@ function renderThinkingLines(text) {
   for (var i = 0; i < lines.length; i++) {
     var line = lines[i];
     if (line.trim()) {
-      // Insert <br> when punctuation (.!?;:,) is immediately followed by a letter
       var escaped = escHtml(line);
-      escaped = escaped.replace(/([.!?;:,])([A-Za-z])/g, "$1<br>$2");
+      // escaped = escaped.replace(/([.!?;:,])([A-Za-z])/g, "$1<br>$2");
       html += '<div class="conv-thinking-line">' + escaped + "</div>";
     } else {
       html += '<div class="conv-thinking-gap"></div>';
@@ -392,9 +392,9 @@ function renderConversationContent() {
 // Feature status renderer
 // ---------------------------------------------------------------------------
 
-function formatElapsed(startTime) {
+function formatElapsed(startTime, endTime) {
   if (!startTime) return "—";
-  var elapsed = Math.floor((Date.now() - startTime) / 1000);
+  var elapsed = Math.floor(((endTime || Date.now()) - startTime) / 1000);
   var mins = Math.floor(elapsed / 60);
   var secs = elapsed % 60;
   if (mins > 0) {
@@ -430,7 +430,7 @@ function renderFeatureStatusContent() {
 
   html += '<div class="status-section">';
   html += '<div class="status-label">Runtime</div>';
-  html += '<div class="status-value runtime-value">' + formatElapsed(state.featureStartTime) + "</div>";
+  html += '<div class="status-value runtime-value">' + formatElapsed(state.featureStartTime, state.featureEndTime) + "</div>";
   html += "</div>";
 
   html += '<div class="status-section">';
@@ -595,8 +595,10 @@ function updateDOM() {
   }
   var followupTextarea = document.getElementById("followup-textarea");
   var followupSendBtn = document.getElementById("followup-send-btn");
-  if (followupTextarea) followupTextarea.disabled = !state.followupFeatureId;
-  if (followupSendBtn) followupSendBtn.disabled = !state.followupFeatureId;
+  // Disabled when there is no active follow-up session OR the agent is currently processing
+  var followupDisabled = !state.followupFeatureId || state.status === "processing";
+  if (followupTextarea) followupTextarea.disabled = followupDisabled;
+  if (followupSendBtn) followupSendBtn.disabled = followupDisabled;
 
   // Code assist result bar
   var existingBar = document.getElementById("ca-result-bar");
@@ -622,6 +624,10 @@ function updateDOM() {
             .catch(function () {});
         }
       });
+
+      // Refresh left-menu items that may have changed as a result of the run
+      loadTodoNavItem();
+      loadNpmScripts();
     }
   } else if (existingBar) {
     existingBar.remove();
@@ -709,17 +715,273 @@ function initResizeHandles() {
 // ---------------------------------------------------------------------------
 
 function switchPlanFileopsTab(tabName) {
-  var planTab     = document.getElementById("tab-plan");
-  var fileopsTab  = document.getElementById("tab-fileops");
-  var planContent    = document.getElementById("plan-content");
-  var fileopsContent = document.getElementById("fileops-content");
+  var planTab           = document.getElementById("tab-plan");
+  var fileopsTab        = document.getElementById("tab-fileops");
+  var changedfilesTab   = document.getElementById("tab-changedfiles");
+  var planContent       = document.getElementById("plan-content");
+  var fileopsContent    = document.getElementById("fileops-content");
+  var changedContent    = document.getElementById("changedfiles-content");
   if (!planTab || !fileopsTab || !planContent || !fileopsContent) return;
 
-  var showPlan = tabName === "plan";
-  planTab.classList.toggle("active", showPlan);
-  fileopsTab.classList.toggle("active", !showPlan);
-  planContent.style.display    = showPlan ? "" : "none";
-  fileopsContent.style.display = showPlan ? "none" : "";
+  planTab.classList.toggle("active", tabName === "plan");
+  fileopsTab.classList.toggle("active", tabName === "fileops");
+  if (changedfilesTab) changedfilesTab.classList.toggle("active", tabName === "changedfiles");
+
+  planContent.style.display    = tabName === "plan"         ? "" : "none";
+  fileopsContent.style.display = tabName === "fileops"      ? "" : "none";
+  if (changedContent) changedContent.style.display = tabName === "changedfiles" ? "" : "none";
+
+  if (tabName === "changedfiles" && changedContent) {
+    changedContent.innerHTML = renderChangedFilesContent();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Changed Files renderer
+// ---------------------------------------------------------------------------
+
+function renderChangedFilesContent() {
+  // Deduplicate fileOps: keep last op per path (write/edit take precedence over read)
+  var seen = {};
+  var ops = state.fileOps;
+  for (var i = ops.length - 1; i >= 0; i--) {
+    var op = ops[i];
+    if (!seen[op.path]) {
+      seen[op.path] = op;
+    } else if (op.type !== "read" && seen[op.path].type === "read") {
+      seen[op.path] = op;
+    }
+  }
+  var unique = Object.values(seen);
+
+  if (unique.length === 0) {
+    return '<div class="empty-state">(no files touched yet)</div>';
+  }
+
+  var rows = unique.map(function(op) {
+    var fullPath = op.path;
+    var displayPath = (state.projectDir && fullPath.startsWith(state.projectDir))
+      ? fullPath.slice(state.projectDir.length).replace(/^[/\\]/, "")
+      : fullPath;
+    var escapedDisplay = escHtml(displayPath);
+    var safeFullPath = fullPath.replace(/"/g, "&quot;");
+    var diffBtn = op.type === "edit"
+      ? '<button class="cf-btn cf-btn-diff" data-cf-action="diff" data-cf-path="' + safeFullPath + '">Git Diff</button>'
+      : '';
+    return '<tr>' +
+      '<td><span class="cf-type ' + op.type + '">' + op.type.toUpperCase() + '</span></td>' +
+      '<td class="cf-path" title="' + safeFullPath + '">' + escapedDisplay + '</td>' +
+      '<td class="cf-actions">' +
+        diffBtn +
+        '<button class="cf-btn cf-btn-open" data-cf-action="open" data-cf-path="' + safeFullPath + '">Open</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+
+  return '<table class="changed-files-table">' +
+    '<thead><tr><th>Type</th><th>File</th><th>Actions</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody>' +
+    '</table>';
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic conversation tabs (file viewer / git diff)
+// ---------------------------------------------------------------------------
+
+var _dynTabEditors = {}; // key -> ace editor instance
+
+function _convTabKey(action, filePath) {
+  return action + ':' + filePath;
+}
+
+function _shortName(filePath) {
+  return filePath.split('/').pop() || filePath;
+}
+
+function openConvDynamicTab(action, filePath) {
+  var key = _convTabKey(action, filePath);
+  var tabBar = document.getElementById("conv-tab-bar");
+  var convPanel = document.getElementById("panel-conversation");
+  if (!tabBar || !convPanel) return;
+
+  // If tab already exists, just activate it
+  var existingTab = tabBar.querySelector('[data-conv-tab="' + key + '"]');
+  if (existingTab) {
+    activateConvTab(key);
+    return;
+  }
+
+  var shortName = _shortName(filePath);
+  var label = action === "diff" ? "Git Diff: " + shortName : shortName;
+
+  // Create tab button
+  var tabSpan = document.createElement("span");
+  tabSpan.className = "panel-tab conv-dynamic-tab";
+  tabSpan.setAttribute("data-conv-tab", key);
+  var labelNode = document.createTextNode(label + " ");
+  tabSpan.appendChild(labelNode);
+
+  var closeBtn = document.createElement("button");
+  closeBtn.className = "conv-dynamic-tab-close";
+  closeBtn.title = "Close tab";
+  closeBtn.textContent = "×";
+  closeBtn.setAttribute("data-conv-tab-close", key);
+  tabSpan.appendChild(closeBtn);
+  tabBar.appendChild(tabSpan);
+
+  // Create content div
+  var contentDiv = document.createElement("div");
+  contentDiv.className = "panel-content dynamic-tab-content";
+  contentDiv.id = "conv-tab-content-" + key.replace(/[^a-zA-Z0-9]/g, "_");
+  contentDiv.style.display = "none";
+  contentDiv.style.padding = "0";
+
+  if (action === "diff") {
+    contentDiv.innerHTML = '<div class="diff-viewer"><span class="diff-meta">Loading diff…</span></div>';
+  } else {
+    contentDiv.innerHTML = '<div class="dynamic-tab-ace" id="ace-' + key.replace(/[^a-zA-Z0-9]/g, "_") + '"></div>';
+  }
+
+  // Insert before followup-input-area
+  var followupArea = document.getElementById("followup-input-area");
+  var container = followupArea ? followupArea.parentNode : convPanel;
+  if (followupArea && followupArea.parentNode) {
+    followupArea.parentNode.insertBefore(contentDiv, followupArea);
+  } else {
+    convPanel.appendChild(contentDiv);
+  }
+
+  activateConvTab(key);
+
+  // Load content
+  if (action === "diff") {
+    loadGitDiffIntoTab(filePath, contentDiv);
+  } else {
+    loadFileIntoTab(filePath, key, contentDiv);
+  }
+}
+
+function activateConvTab(key) {
+  var tabBar = document.getElementById("conv-tab-bar");
+  var convPanel = document.getElementById("panel-conversation");
+  if (!tabBar || !convPanel) return;
+
+  // Deactivate all tabs
+  var allTabs = tabBar.querySelectorAll("[data-conv-tab]");
+  allTabs.forEach(function(t) { t.classList.remove("active"); });
+
+  // Hide all content: conversation-content and all dynamic tab content
+  var convContent = document.getElementById("conversation-content");
+  if (convContent) convContent.style.display = "none";
+  var allContent = convPanel.querySelectorAll(".dynamic-tab-content");
+  allContent.forEach(function(c) { c.style.display = "none"; });
+
+  // Activate chosen tab
+  var activeTab = tabBar.querySelector('[data-conv-tab="' + key + '"]');
+  if (activeTab) activeTab.classList.add("active");
+
+  if (key === "conversation") {
+    if (convContent) convContent.style.display = "";
+  } else {
+    var safeKey = key.replace(/[^a-zA-Z0-9]/g, "_");
+    var targetContent = document.getElementById("conv-tab-content-" + safeKey);
+    if (targetContent) {
+      targetContent.style.display = "";
+      // Resize ace editor if present
+      var editor = _dynTabEditors[key];
+      if (editor) editor.resize();
+    }
+  }
+}
+
+function closeConvDynamicTab(key) {
+  var tabBar = document.getElementById("conv-tab-bar");
+  var convPanel = document.getElementById("panel-conversation");
+  if (!tabBar || !convPanel) return;
+
+  var tab = tabBar.querySelector('[data-conv-tab="' + key + '"]');
+  var safeKey = key.replace(/[^a-zA-Z0-9]/g, "_");
+  var content = document.getElementById("conv-tab-content-" + safeKey);
+
+  // Destroy ace editor if exists
+  if (_dynTabEditors[key]) {
+    try { _dynTabEditors[key].destroy(); } catch(e) {}
+    delete _dynTabEditors[key];
+  }
+
+  if (tab) tab.remove();
+  if (content) content.remove();
+
+  // Go back to conversation tab
+  activateConvTab("conversation");
+}
+
+function loadFileIntoTab(filePath, key, contentDiv) {
+  signedFetch("/api/file-content?path=" + encodeURIComponent(filePath), { method: "GET" })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) {
+        contentDiv.innerHTML = '<div class="empty-state" style="color:#ef4444">' + escHtml(data.error) + '</div>';
+        return;
+      }
+      var safeKey = key.replace(/[^a-zA-Z0-9]/g, "_");
+      var aceEl = document.getElementById("ace-" + safeKey);
+      if (!aceEl || typeof ace === "undefined") {
+        contentDiv.innerHTML = '<pre style="padding:12px;color:#e2e8f0;overflow:auto;height:100%">' + escHtml(data.content) + '</pre>';
+        return;
+      }
+      var editor = ace.edit(aceEl);
+      editor.setTheme("ace/theme/monokai");
+      editor.setReadOnly(true);
+      editor.setShowPrintMargin(false);
+      editor.setOptions({ fontSize: "12px", wrap: false });
+      var ext = filePath.split('.').pop().toLowerCase();
+      var modeMap = {
+        js: "javascript", ts: "typescript", py: "python",
+        rb: "ruby", go: "golang", rs: "rust", md: "markdown",
+        json: "json", html: "html", css: "css", sh: "sh",
+        yaml: "yaml", yml: "yaml", toml: "toml", xml: "xml",
+        ex: "elixir", exs: "elixir"
+      };
+      var mode = modeMap[ext] || "text";
+      editor.session.setMode("ace/mode/" + mode);
+      editor.setValue(data.content, -1);
+      _dynTabEditors[key] = editor;
+    })
+    .catch(function() {
+      contentDiv.innerHTML = '<div class="empty-state" style="color:#ef4444">Failed to load file.</div>';
+    });
+}
+
+function loadGitDiffIntoTab(filePath, contentDiv) {
+  signedFetch("/api/git-diff?path=" + encodeURIComponent(filePath), { method: "GET" })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.unavailable || data.diff === null) {
+        contentDiv.innerHTML = '<div class="diff-unavailable">Git Diff Unavailable</div>';
+        return;
+      }
+      if (!data.diff || data.diff.trim() === "") {
+        contentDiv.innerHTML = '<div class="diff-unavailable">No changes detected (file matches HEAD)</div>';
+        return;
+      }
+      var lines = data.diff.split('\n');
+      var html = '<div class="diff-viewer">';
+      lines.forEach(function(line) {
+        var cls = "diff-meta";
+        if (line.startsWith('+++') || line.startsWith('---')) cls = "diff-header";
+        else if (line.startsWith('+'))  cls = "diff-add";
+        else if (line.startsWith('-'))  cls = "diff-remove";
+        else if (line.startsWith('@@')) cls = "diff-hunk";
+        else if (line.startsWith('diff') || line.startsWith('index') || line.startsWith('Binary')) cls = "diff-header";
+        html += '<span class="diff-line ' + cls + '">' + escHtml(line) + '</span>\n';
+      });
+      html += '</div>';
+      contentDiv.innerHTML = html;
+    })
+    .catch(function() {
+      contentDiv.innerHTML = '<div class="diff-unavailable">Git Diff Unavailable</div>';
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1256,7 +1518,7 @@ function openTodoMenu() {
   var overlay = document.createElement("div");
   overlay.className = "ca-overlay";
   overlay.innerHTML =
-    '<div class="ca-card">' +
+    '<div class="ca-card ca-card--wide">' +
       '<div class="ca-header">' +
         '<h2>&#x2714;&#xFE0F; TODO List</h2>' +
         '<button class="dialog-close ca-close" aria-label="Close">&times;</button>' +
@@ -1299,7 +1561,8 @@ function openTodoMenu() {
             '</div>' +
             '<div class="ca-option-actions">' +
               '<button class="ca-btn ca-btn-preview" data-id="' + item.id + '">Preview</button>' +
-              '<button class="ca-btn ca-btn-run" data-id="' + item.id + '">Run</button>' +
+              '<button class="ca-btn ca-btn-run" data-id="' + item.id + '">Open</button>' +
+              '<button class="ca-btn ca-btn-remove" data-id="' + item.id + '">Remove</button>' +
             '</div>' +
           '</div>';
       });
@@ -1320,6 +1583,31 @@ function openTodoMenu() {
             closeTodoMenu();
             runTodoPlanFromWeb(item);
           }
+        });
+      });
+      body.querySelectorAll(".ca-btn-remove").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = parseInt(btn.getAttribute("data-id"), 10);
+          btn.disabled = true;
+          signedFetch("/api/todo/item", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: id }),
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data.ok) {
+                var row = btn.closest(".ca-option");
+                if (row) row.remove();
+                items = items.filter(function (i) { return i.id !== id; });
+                if (items.length === 0) {
+                  body.innerHTML = '<div class="empty-state">No TODO items found</div>';
+                }
+              } else {
+                btn.disabled = false;
+              }
+            })
+            .catch(function () { btn.disabled = false; });
         });
       });
     })
@@ -1582,7 +1870,7 @@ function updateProcessingNavItem() {
     iconEl.innerHTML = isProcessing ? '&#x2699;&#xFE0F;' : '&#x2705;';
     iconEl.classList.toggle("nav-icon-spin", isProcessing);
   }
-  if (labelEl) labelEl.textContent = isProcessing ? "Processing" : "Finished";
+  if (labelEl) labelEl.textContent = isProcessing ? "Processing" : "Waiting";
 
   // Keep active state if on processing view
   if (navEl && currentView === "processing") {
@@ -1611,6 +1899,7 @@ function showFeaturesView() {
 var nfAceEditor = null;
 var settingsAceEditor = null;
 var settingsCurrentFile = null;
+var settingsCurrentPanel = null; // "kaibot-settings" or null (file editor)
 var settingsDirtyFiles = {};
 var settingsOriginalContent = {};
 var settingsCurrentContent = {};
@@ -1624,8 +1913,8 @@ function showSettingsView() {
   if (navSettings) navSettings.classList.add("active");
   updateNpmCommandsListActive(null);
   initSettingsEditor();
-  if (!settingsCurrentFile) {
-    selectSettingsTab("CLAUDE.md");
+  if (!settingsCurrentFile && !settingsCurrentPanel) {
+    selectKaiBotSettingsPanel();
   }
 }
 
@@ -1669,14 +1958,48 @@ function initSettingsEditor() {
   });
 }
 
+function selectKaiBotSettingsPanel() {
+  if (settingsCurrentFile && settingsAceEditor) {
+    settingsCurrentContent[settingsCurrentFile] = settingsAceEditor.getValue();
+  }
+  settingsCurrentFile = null;
+  settingsCurrentPanel = "kaibot-settings";
+  document.querySelectorAll(".settings-tab").forEach(function (tab) {
+    tab.classList.toggle("active", tab.getAttribute("data-panel") === "kaibot-settings");
+  });
+  var panel = document.getElementById("kaibot-settings-panel");
+  var editorArea = document.getElementById("settings-editor-area");
+  if (panel) panel.style.display = "";
+  if (editorArea) editorArea.style.display = "none";
+  loadKaiBotSettingsPanel();
+}
+
+function loadKaiBotSettingsPanel() {
+  signedFetch("/api/global-settings")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var toggle = document.getElementById("setting-matomo-enabled");
+      if (toggle) {
+        // Default is enabled (true) when key is absent
+        toggle.checked = data.matomoEnabled !== false;
+      }
+    })
+    .catch(function () {});
+}
+
 function selectSettingsTab(filePath) {
   if (settingsCurrentFile && settingsAceEditor) {
     settingsCurrentContent[settingsCurrentFile] = settingsAceEditor.getValue();
   }
   settingsCurrentFile = filePath;
+  settingsCurrentPanel = null;
   document.querySelectorAll(".settings-tab").forEach(function (tab) {
     tab.classList.toggle("active", tab.getAttribute("data-file") === filePath);
   });
+  var panel = document.getElementById("kaibot-settings-panel");
+  var editorArea = document.getElementById("settings-editor-area");
+  if (panel) panel.style.display = "none";
+  if (editorArea) editorArea.style.display = "";
   var label = document.getElementById("settings-file-label");
   if (label) label.textContent = filePath;
   if (settingsCurrentContent[filePath] !== undefined) {
@@ -1770,6 +2093,7 @@ function renderHoldFeatures(items) {
           '<div class="feature-list-title">' + escHtml(item.title) + '</div>' +
           '<div class="feature-list-meta">' + escHtml(item.filename) + '</div>' +
         '</div>' +
+        '<button class="hold-edit-btn" data-edit-filename="' + escHtml(item.filename) + '" draggable="false" title="Edit feature">&#x270F;&#xFE0F;</button>' +
       '</div>'
     );
   }).join("");
@@ -2190,6 +2514,57 @@ function closeClarifyModal() {
 }
 
 // ---------------------------------------------------------------------------
+// Feature-assist clarification modal — shown when the AI needs answers before
+// it can write a full feature spec (separate from the agent CLARIFY flow)
+// ---------------------------------------------------------------------------
+
+function showNfClarifyModal(questions, onSubmit) {
+  var overlay = document.createElement("div");
+  overlay.className = "clarify-overlay";
+
+  overlay.innerHTML =
+    '<div class="clarify-modal">' +
+      '<div class="clarify-header">' +
+        '<span class="clarify-icon">&#x2753;</span>' +
+        '<span class="clarify-title">Assistant needs clarification</span>' +
+      '</div>' +
+      '<div class="clarify-question" id="nf-clarify-q"></div>' +
+      '<textarea class="clarify-textarea" id="nf-clarify-textarea" rows="5"' +
+        ' placeholder="Type your answers here\u2026"></textarea>' +
+      '<div class="clarify-actions">' +
+        '<button class="clarify-send-btn" id="nf-clarify-send">Submit Answers</button>' +
+        '<button class="clarify-skip-btn" id="nf-clarify-cancel">Cancel</button>' +
+      '</div>' +
+    '</div>';
+
+  overlay.querySelector("#nf-clarify-q").textContent = questions;
+  document.body.appendChild(overlay);
+
+  var textarea = overlay.querySelector("#nf-clarify-textarea");
+
+  function close() { overlay.remove(); }
+
+  function send() {
+    var answers = textarea.value.trim();
+    if (!answers) return;
+    close();
+    onSubmit(answers);
+  }
+
+  overlay.querySelector("#nf-clarify-send").addEventListener("click", send);
+  overlay.querySelector("#nf-clarify-cancel").addEventListener("click", close);
+
+  textarea.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      send();
+    }
+  });
+
+  setTimeout(function () { textarea.focus(); }, 50);
+}
+
+// ---------------------------------------------------------------------------
 // Feature detail — resume session follow-up
 // ---------------------------------------------------------------------------
 
@@ -2449,6 +2824,8 @@ function hideWorkingDialog() {
 // ---------------------------------------------------------------------------
 
 var newFeatureDialogOpen = false;
+var _editingHoldFilename = null;  // filename of hold feature being edited
+var _editingFeatureId = null;     // Feature ID string preserved across edits
 
 function openNewFeatureDialog() {
   var overlay = document.getElementById("new-feature-overlay");
@@ -2475,6 +2852,49 @@ function closeNewFeatureDialog() {
   var overlay = document.getElementById("new-feature-overlay");
   if (overlay) overlay.style.display = "none";
   newFeatureDialogOpen = false;
+  if (_editingHoldFilename) {
+    _editingHoldFilename = null;
+    _editingFeatureId = null;
+    var dialogTitle = document.getElementById("nf-dialog-title");
+    var holdBtn = document.getElementById("nf-hold");
+    var saveBtn = document.getElementById("nf-save");
+    if (dialogTitle) dialogTitle.innerHTML = "&#x2728; New Feature";
+    if (holdBtn) holdBtn.textContent = "Save to Backlog";
+    if (saveBtn) saveBtn.textContent = "Save";
+  }
+}
+
+function openHoldFeatureForEdit(filename) {
+  signedFetch("/api/features/hold-file?filename=" + encodeURIComponent(filename))
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.error) return;
+      _editingHoldFilename = filename;
+      _editingFeatureId = data.featureId || "";
+
+      var overlay = document.getElementById("new-feature-overlay");
+      if (!overlay || newFeatureDialogOpen) return;
+      newFeatureDialogOpen = true;
+      overlay.style.display = "";
+
+      initNFEditor();
+
+      var titleInput = document.getElementById("nf-title");
+      var errorEl = document.getElementById("nf-error");
+      var dialogTitle = document.getElementById("nf-dialog-title");
+      var holdBtn = document.getElementById("nf-hold");
+      var saveBtn = document.getElementById("nf-save");
+
+      if (titleInput) titleInput.value = data.title || "";
+      if (nfAceEditor) nfAceEditor.setValue(data.body || "", -1);
+      if (errorEl) { errorEl.style.display = "none"; errorEl.textContent = ""; }
+      if (dialogTitle) dialogTitle.innerHTML = "&#x270F;&#xFE0F; Edit Feature";
+      if (holdBtn) holdBtn.textContent = "Update Backlog";
+      if (saveBtn) saveBtn.textContent = "Move to Pending";
+
+      if (titleInput) setTimeout(function () { titleInput.focus(); }, 50);
+    })
+    .catch(function () {});
 }
 
 function submitNewFeature(hold) {
@@ -2502,29 +2922,47 @@ function submitNewFeature(hold) {
   if (assistBtn) assistBtn.disabled = true;
   if (errorEl) errorEl.style.display = "none";
 
-  signedFetch("/api/features", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: title, description: description, hold: !!hold }),
-  })
+  var fetchPromise;
+  if (_editingHoldFilename) {
+    // Editing an existing hold feature — update in place or move to pending
+    fetchPromise = signedFetch("/api/features/hold-file", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: _editingHoldFilename,
+        featureId: _editingFeatureId,
+        title: title,
+        description: description,
+        moveToPending: !hold,
+      }),
+    });
+  } else {
+    // Creating a new feature
+    fetchPromise = signedFetch("/api/features", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: title, description: description, hold: !!hold }),
+    });
+  }
+
+  fetchPromise
     .then(function (res) {
       if (!res.ok) {
         return res.json().then(function (data) {
-          throw new Error(data.error || "Failed to create feature");
+          throw new Error(data.error || "Failed to save feature");
         });
       }
       return res.json();
     })
     .then(function () {
       closeNewFeatureDialog();
-      // If we're on the features view, refresh the list
       if (currentView === "features") {
         loadFeaturesData();
       }
     })
     .catch(function (err) {
       if (errorEl) {
-        errorEl.textContent = err.message || "Failed to create feature";
+        errorEl.textContent = err.message || "Failed to save feature";
         errorEl.style.display = "";
       }
     })
@@ -2538,9 +2976,6 @@ function submitNewFeature(hold) {
 function submitToAssistant() {
   var titleInput = document.getElementById("nf-title");
   var errorEl = document.getElementById("nf-error");
-  var saveBtn = document.getElementById("nf-save");
-  var holdBtn = document.getElementById("nf-hold");
-  var assistBtn = document.getElementById("nf-assist");
 
   var title = titleInput ? titleInput.value.trim() : "";
   var description = nfAceEditor ? nfAceEditor.getValue().trim() : "";
@@ -2554,10 +2989,19 @@ function submitToAssistant() {
     return;
   }
 
-  // Disable all buttons during submission
+  runFeatureAssist(title, description);
+}
+
+function runFeatureAssist(title, description) {
+  var titleInput = document.getElementById("nf-title");
+  var errorEl = document.getElementById("nf-error");
+  var saveBtn = document.getElementById("nf-save");
+  var holdBtn = document.getElementById("nf-hold");
+  var assistBtn = document.getElementById("nf-assist");
+
   if (saveBtn) saveBtn.disabled = true;
   if (holdBtn) holdBtn.disabled = true;
-  if (assistBtn) { assistBtn.disabled = true; assistBtn.textContent = "Working…"; }
+  if (assistBtn) { assistBtn.disabled = true; assistBtn.textContent = "Working\u2026"; }
   if (errorEl) errorEl.style.display = "none";
 
   showWorkingDialog();
@@ -2576,16 +3020,23 @@ function submitToAssistant() {
       return res.json();
     })
     .then(function (data) {
-      // Update the title and description fields with the assistant's response
+      // Use the possibly-refined title for any re-submission
+      var currentTitle = title;
       if (data.title && titleInput) {
         titleInput.value = data.title;
+        currentTitle = data.title;
       }
       if (data.description && nfAceEditor) {
         nfAceEditor.setValue(data.description, -1);
       }
-      if (data.clarify && errorEl) {
-        errorEl.textContent = "Assistant needs clarification: " + data.clarify;
-        errorEl.style.display = "";
+      if (data.clarify) {
+        // Show interactive clarification modal instead of dumping text into the error div
+        showNfClarifyModal(data.clarify, function (answers) {
+          var augmented = (description ? description + "\n\n" : "") +
+            "## Clarification\n\n**Questions:**\n" + data.clarify +
+            "\n\n**Answers:**\n" + answers;
+          runFeatureAssist(currentTitle, augmented);
+        });
       }
     })
     .catch(function (err) {
@@ -3015,11 +3466,38 @@ document.addEventListener("keydown", function (e) {
 });
 
 document.addEventListener("click", function (e) {
-  // Plan / File Operations tab switching
+  // Plan / File Operations / Changed Files tab switching
   var panelTab = e.target.closest ? e.target.closest("[data-panel-tab]") : null;
   if (panelTab) {
     var tabName = panelTab.getAttribute("data-panel-tab");
     if (tabName) switchPlanFileopsTab(tabName);
+  }
+
+  // Conversation panel dynamic tab switching
+  var convTabClose = e.target.closest ? e.target.closest("[data-conv-tab-close]") : null;
+  if (convTabClose) {
+    e.stopPropagation();
+    var closeKey = convTabClose.getAttribute("data-conv-tab-close");
+    if (closeKey) closeConvDynamicTab(closeKey);
+    return;
+  }
+  var convTab = e.target.closest ? e.target.closest("[data-conv-tab]") : null;
+  if (convTab && !convTabClose) {
+    var convKey = convTab.getAttribute("data-conv-tab");
+    if (convKey) activateConvTab(convKey);
+  }
+
+  // Changed Files action buttons
+  var cfBtn = e.target.closest ? e.target.closest("[data-cf-action]") : null;
+  if (cfBtn) {
+    var cfAction = cfBtn.getAttribute("data-cf-action");
+    var cfPath   = cfBtn.getAttribute("data-cf-path");
+    if (cfAction && cfPath) {
+      // Switch to Processing view if not already there
+      showProcessingView();
+      openConvDynamicTab(cfAction, cfPath);
+    }
+    return;
   }
 
   var trigger = document.getElementById("model-trigger");
@@ -3089,8 +3567,13 @@ document.addEventListener("click", function (e) {
   // Settings tab clicks
   var settingsTab = e.target.closest ? e.target.closest(".settings-tab") : null;
   if (settingsTab) {
+    var panelKey = settingsTab.getAttribute("data-panel");
     var fileKey = settingsTab.getAttribute("data-file");
-    if (fileKey) selectSettingsTab(fileKey);
+    if (panelKey === "kaibot-settings") {
+      selectKaiBotSettingsPanel();
+    } else if (fileKey) {
+      selectSettingsTab(fileKey);
+    }
   }
 
   // Settings save button
@@ -3190,11 +3673,31 @@ document.addEventListener("click", function (e) {
     sendFdResumeMessage();
   }
 
+  // Hold feature edit button
+  var holdEditBtn = e.target.closest ? e.target.closest(".hold-edit-btn") : null;
+  if (holdEditBtn) {
+    e.stopPropagation();
+    var editFilename = holdEditBtn.getAttribute("data-edit-filename");
+    if (editFilename) openHoldFeatureForEdit(editFilename);
+  }
+
   // Complete feature items — click to open detail
   var featureItem = e.target.closest ? e.target.closest("[data-feature-id]") : null;
   if (featureItem) {
     var fid = featureItem.getAttribute("data-feature-id");
     if (fid) openFeatureDetailDialog(fid);
+  }
+});
+
+// KaiBot Settings toggles
+document.addEventListener("change", function (e) {
+  var toggle = e.target;
+  if (toggle && toggle.id === "setting-matomo-enabled") {
+    signedFetch("/api/global-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ matomoEnabled: toggle.checked }),
+    }).catch(function () {});
   }
 });
 

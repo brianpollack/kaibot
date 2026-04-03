@@ -6,5 +6,13 @@
     "prompt": "tech_debt.md",
     "result_action": "View TODO.md",
     "result_open": "{projectDir}/todo.md"
+  },
+  {
+    "name": "Run and Fix All Tests",
+    "description": "Detect the test framework, run all tests, and produce a remediation plan for any failures.",
+    "author": "Brian Pollack",
+    "prompt": "run_and_fix_tests.md",
+    "result_action": "View Test Report",
+    "result_open": "{projectDir}/test_report.md"
   }
 ]

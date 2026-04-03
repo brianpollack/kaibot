@@ -91,8 +91,7 @@ describe("bashSecurityHook — blocked commands", () => {
     "sh exploit.sh",
     "zsh -c 'cat /etc/passwd'",
     "python2 legacy.py",       // python2 not in list
-    "yarn add lodash",          // yarn not in list
-    "pnpm install",             // pnpm not in list
+    // yarn and pnpm are intentionally allowed in ALLOWED_UNIX
     "kill -9 1234",
     "pkill node",
     "shutdown -h now",

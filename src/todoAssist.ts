@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
 import type { SDKAssistantMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
@@ -40,6 +40,26 @@ export function loadTodoItems(projectDir: string): TodoItem[] {
     return obj["items"] as TodoItem[];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Remove the TODO item with the given id from todo.json.
+ * Returns true if the item was found and removed, false if it did not exist.
+ */
+export function removeTodoItem(projectDir: string, id: number): boolean {
+  const path = join(projectDir, "todo.json");
+  try {
+    const raw = readFileSync(path, "utf-8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!Array.isArray(parsed["items"])) return false;
+    const before = (parsed["items"] as TodoItem[]).length;
+    parsed["items"] = (parsed["items"] as TodoItem[]).filter((i) => i.id !== id);
+    if ((parsed["items"] as TodoItem[]).length === before) return false;
+    writeFileSync(path, JSON.stringify(parsed, null, 2), "utf-8");
+    return true;
+  } catch {
+    return false;
   }
 }
 

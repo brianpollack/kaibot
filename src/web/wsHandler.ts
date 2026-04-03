@@ -8,6 +8,7 @@ import type { NpmCommandRunner } from "./NpmCommandRunner.js";
 import type { WebServer } from "./WebServer.js";
 import { closeSession, hasSession, resumeSession, sendFollowup } from "./followupSession.js";
 import { verifyWsHmac } from "./hmac.js";
+import { redactSecrets, invalidateSecretsCache } from "./secretFilter.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -22,6 +23,7 @@ export interface WebUIState {
   featureName: string | null;
   featureStage: UIState["featureStage"];
   featureStartTime: number | null;
+  featureEndTime: number | null;
   thinkingLines: string[];
   commands: UIState["commands"];
   fileOps: UIState["fileOps"];
@@ -57,6 +59,7 @@ export function getWebState(): WebUIState {
     featureName: s.featureName,
     featureStage: s.featureStage,
     featureStartTime: s.featureStartTime,
+    featureEndTime: s.featureEndTime,
     thinkingLines: s.thinkingLines,
     commands: s.commands,
     fileOps: s.fileOps,
@@ -80,7 +83,8 @@ export function getWebState(): WebUIState {
 function broadcast(): void {
   if (clients.size === 0) return;
 
-  const msg = JSON.stringify({ type: "state", data: getWebState() });
+  const projectDir = uiStore.getState().projectDir;
+  const msg = redactSecrets(JSON.stringify({ type: "state", data: getWebState() }), projectDir);
 
   for (const client of clients) {
     if (client.readyState === 1 /* OPEN */) {
@@ -202,13 +206,16 @@ export function setupWebSocketHandler(
       wireNpmEvents(server.npmRunner);
     }
     wireTodoWatcher(projectDir);
+    // Reload secret filter for the new project's .env
+    invalidateSecretsCache();
   });
 
   wss.on("connection", (ws: WebSocket) => {
     clients.add(ws);
 
     // Send current state immediately on connect
-    const msg = JSON.stringify({ type: "state", data: getWebState() });
+    const projectDir = uiStore.getState().projectDir;
+    const msg = redactSecrets(JSON.stringify({ type: "state", data: getWebState() }), projectDir);
     ws.send(msg);
 
     ws.on("message", (raw: Buffer | string) => {

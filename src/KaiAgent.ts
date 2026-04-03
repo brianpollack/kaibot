@@ -363,7 +363,7 @@ export function routeToolUse(name: string, input: Record<string, unknown> | unde
       typeof input?.file_path === "string" ? input.file_path : "(unknown)";
     const opType = name.toLowerCase() as "read" | "write" | "edit";
     const preview = getFileOpPreview(name, input);
-    uiStore.pushFileOp({ type: opType, path: basename(filePath), preview });
+    uiStore.pushFileOp({ type: opType, path: filePath, preview });
     // Notify listeners when the agent writes/edits package.json so the npm
     // scripts list can be refreshed proactively (fs.watch is unreliable for
     // sandboxed SDK file tools).

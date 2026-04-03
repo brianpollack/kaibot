@@ -90,6 +90,8 @@ const SANDBOX_NETWORK_COMMANDS = [
   "pip3",
   "mix",
   "hex",
+  // PostgreSQL client — needs outbound TCP to port 5432
+  "psql",
 ];
 
 interface SecuritySettings {
@@ -97,6 +99,15 @@ interface SecuritySettings {
     enabled: boolean;
     autoAllowBashIfSandboxed: boolean;
     excludedCommands: string[];
+    network: {
+      /** Allow outbound HTTPS (port 443) to any host. */
+      allowedDomains: string[];
+      /**
+       * Allow PostgreSQL Unix-socket connections (the standard local-DB path).
+       * Covers /tmp/.s.PGSQL.5432 and the Linux /var/run/postgresql socket dir.
+       */
+      allowUnixSockets: string[];
+    };
   };
   permissions: { defaultMode: string; allow: string[] };
   autoMemoryEnabled: boolean;
@@ -108,6 +119,16 @@ function buildSecuritySettings(): SecuritySettings {
       enabled: true,
       autoAllowBashIfSandboxed: true,
       excludedCommands: SANDBOX_NETWORK_COMMANDS,
+      network: {
+        // Allow all outbound HTTPS (port 443)
+        allowedDomains: ["*"],
+        // Allow PostgreSQL connections over Unix socket (port 5432 local equivalent)
+        allowUnixSockets: [
+          "/tmp/.s.PGSQL.5432",
+          "/var/run/postgresql/.s.PGSQL.5432",
+          "/var/run/postgresql",
+        ],
+      },
     },
     permissions: {
       // Auto-approve file edits within the allowed directories below

@@ -87,6 +87,8 @@ export interface UIState {
   featureStage: FeatureStage;
   /** Timestamp (Date.now()) when the current feature started processing, or null. */
   featureStartTime: number | null;
+  /** Timestamp (Date.now()) when the current feature finished processing, or null while still running. */
+  featureEndTime: number | null;
 
   // Terminal dimensions
   terminalColumns: number;
@@ -173,6 +175,7 @@ class UIStore extends EventEmitter {
     featureName: null,
     featureStage: null,
     featureStartTime: null,
+    featureEndTime: null,
     terminalColumns: (process.stdout.columns ?? 80) - 4,
     terminalRows: process.stdout.rows ?? 24,
     thinkingLines: [],
@@ -231,6 +234,12 @@ class UIStore extends EventEmitter {
 
   setFeatureStartTime(time: number | null): void {
     this.state.featureStartTime = time;
+    this.state.featureEndTime = null; // clear end time whenever a new run starts
+    this.emitChange();
+  }
+
+  setFeatureEndTime(time: number | null): void {
+    this.state.featureEndTime = time;
     this.emitChange();
   }
 
@@ -678,6 +687,7 @@ class UIStore extends EventEmitter {
     this.state.featureName = null;
     this.state.featureStage = null;
     this.state.featureStartTime = null;
+    this.state.featureEndTime = null;
     this.state.thinkingLines = [];
     this.state.commands = [];
     this.state.fileOps = [];

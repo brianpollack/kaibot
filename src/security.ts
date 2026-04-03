@@ -51,6 +51,8 @@ const ALLOWED_UNIX = new Set([
   // Network (read-only)
   "curl",
   "wget",
+  // Database
+  "psql",
   // Graphics
   "sips",
   "convert",
@@ -107,6 +109,8 @@ const ALLOWED_WINDOWS = new Set([
   "hex",
   // Network (curl is built into Windows 10+)
   "curl",
+  // Database
+  "psql",
   // Graphics (ImageMagick)
   "convert",
   "magick",
