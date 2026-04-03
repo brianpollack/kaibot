@@ -15,6 +15,7 @@ npm run lint:fix     # ESLint with auto-fix
 npm run format       # Prettier format src/
 npm run test         # Run all tests (vitest run)
 npm run test:watch   # Run tests in watch mode
+npm run test:openrouter  # OpenRouter smoke test (requires OPENROUTER_API_KEY; excluded from npm run test)
 npm run testOpenrouter  # Spawn an OpenRouter agent and ask "Tell me about yourself"
 ```
 

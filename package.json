@@ -30,6 +30,7 @@
     "format": "prettier --write src",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:openrouter": "vitest run --config vitest.openrouter.config.ts",
     "test:real": "tsx src/kai_test_real.ts",
     "testOpenrouter": "tsx src/kai_bot.ts testOpenrouter",
     "latest": "npm install @anthropic-ai/claude-agent-sdk@latest @linear/sdk@latest"
