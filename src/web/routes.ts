@@ -22,7 +22,8 @@ import { loadProjectEnv } from "../env.js";
 import { loadCodeAssistOptions, loadPromptContent, runCodeAssist } from "../codeAssist.js";
 import { KaiClient } from "../KaiClient.js";
 import type { SDKAssistantMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
-import { todoExists, loadTodoItems, runTodoPlan } from "../todoAssist.js";
+import { todoExists, loadTodoItems, removeTodoItem, runTodoPlan } from "../todoAssist.js";
+import { loadGlobalSettings, saveGlobalSettings } from "../globalSettings.js";
 
 // ---------------------------------------------------------------------------
 // MIME types
@@ -162,6 +163,37 @@ export function handleRequest(
     }));
     res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
     res.end(JSON.stringify({ paths: result }));
+    return;
+  }
+
+  // ── Browse folders API — lists subdirectories for the folder browser ─
+  if (pathname === "/api/browse-folders" && req.method === "GET") {
+    const rawPath = url.searchParams.get("path") || homedir();
+    const resolvedPath = resolve(expandTilde(rawPath));
+
+    if (!existsSync(resolvedPath) || !statSync(resolvedPath).isDirectory()) {
+      res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Invalid directory" }));
+      return;
+    }
+
+    try {
+      const entries = readdirSync(resolvedPath, { withFileTypes: true });
+      const dirs = entries
+        .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+        .map((e) => e.name)
+        .sort((a, b) => a.localeCompare(b));
+
+      // Resolve the parent path; null when already at filesystem root
+      const parentPath = resolve(resolvedPath, "..");
+      const parent = parentPath !== resolvedPath ? parentPath : null;
+
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ path: resolvedPath, parent, dirs }));
+    } catch {
+      res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Could not read directory" }));
+    }
     return;
   }
 
@@ -498,6 +530,35 @@ export function handleRequest(
     return;
   }
 
+  // ── API: remove a TODO item ───────────────────────────────────────
+  if (pathname === "/api/todo/item" && req.method === "DELETE") {
+    readBody(req)
+      .then((body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        if (!requireProject(server, res)) return;
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const id = Number(data["id"]);
+        if (!Number.isFinite(id)) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: "Invalid id" }));
+          return;
+        }
+        const removed = removeTodoItem(server.projectDir!, id);
+        if (!removed) {
+          res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: `TODO item not found: ${id}` }));
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ ok: true }));
+      })
+      .catch(() => {
+        res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error: "Invalid request body" }));
+      });
+    return;
+  }
+
   // ── API: run TODO plan via Claude agent ───────────────────────────
   if (pathname === "/api/todo/plan" && req.method === "POST") {
     readBody(req)
@@ -547,6 +608,100 @@ export function handleRequest(
     if (!requireProject(server, res)) return;
     res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
     res.end(JSON.stringify(getFeaturesList(server.projectDir!)));
+    return;
+  }
+
+  // ── API: hold feature file — read ────────────────────────────────────────────
+  if (pathname === "/api/features/hold-file" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
+    const filename = url.searchParams.get("filename") ?? "";
+    if (!filename || !filename.endsWith(".md") || filename.includes("/") || filename.includes("\\") || filename.includes("..")) {
+      res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Invalid filename" }));
+      return;
+    }
+    const holdPath = join(server.projectDir!, "features", "hold", filename);
+    if (!existsSync(holdPath)) {
+      res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "File not found" }));
+      return;
+    }
+    try {
+      const raw = readFileSync(holdPath, "utf-8");
+      // Parse "Feature ID:" and "Title:" headers, then extract body
+      const lines = raw.split("\n");
+      let featureId = "";
+      let title = "";
+      let bodyStart = 0;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith("Feature ID:")) {
+          featureId = lines[i].replace("Feature ID:", "").trim();
+          bodyStart = i + 1;
+        } else if (lines[i].startsWith("Title:")) {
+          title = lines[i].replace("Title:", "").trim();
+          bodyStart = i + 1;
+        } else if (bodyStart > 0) {
+          // First non-header line — skip leading blanks then treat rest as body
+          while (bodyStart < lines.length && !lines[bodyStart].trim()) bodyStart++;
+          break;
+        }
+      }
+      if (!title) title = extractFeatureTitle(holdPath, filename.replace(/\.md$/, ""));
+      const body = lines.slice(bodyStart).join("\n").trimEnd();
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ featureId, title, body, filename }));
+    } catch {
+      res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Failed to read file" }));
+    }
+    return;
+  }
+
+  // ── API: hold feature file — update (and optionally move to pending) ──
+  if (pathname === "/api/features/hold-file" && req.method === "PUT") {
+    readBody(req)
+      .then((body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        if (!requireProject(server, res)) return;
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const filename = String(data["filename"] ?? "").trim();
+        const featureId = String(data["featureId"] ?? "").trim();
+        const title = String(data["title"] ?? "").trim();
+        const description = String(data["description"] ?? "");
+        const moveToPending = Boolean(data["moveToPending"]);
+
+        if (!filename || !filename.endsWith(".md") || filename.includes("/") || filename.includes("\\") || filename.includes("..")) {
+          res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+          res.end(JSON.stringify({ error: "Invalid filename" }));
+          return;
+        }
+
+        const holdPath = join(server.projectDir!, "features", "hold", filename);
+        const titleLine = title ? `\nTitle: ${title}` : "";
+        const newContent = `Feature ID: ${featureId}${titleLine}\n\n${description}`;
+
+        if (moveToPending) {
+          const pendingPath = join(server.projectDir!, "features", filename);
+          // Write updated content then atomically move out of hold
+          writeFileSync(holdPath, newContent, "utf-8");
+          renameSync(holdPath, pendingPath);
+        } else {
+          if (!existsSync(holdPath)) {
+            res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+            res.end(JSON.stringify({ error: "File not found in hold folder" }));
+            return;
+          }
+          writeFileSync(holdPath, newContent, "utf-8");
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ ok: true }));
+      })
+      .catch(() => {
+        res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error: "Invalid request body" }));
+      });
     return;
   }
 
@@ -725,7 +880,7 @@ export function handleRequest(
         const targetDir = hold ? join(featuresDir, "hold") : featuresDir;
         mkdirSync(targetDir, { recursive: true });
 
-        const content = `Feature ID: ${featureId}\n\n${description}`;
+        const content = `Feature ID: ${featureId}\nTitle: ${title}\n\n${description}`;
         const filePath = join(targetDir, `${featureId}.md`);
         writeFileSync(filePath, content, "utf-8");
 
@@ -766,6 +921,36 @@ export function handleRequest(
         renameSync(holdPath, pendingPath);
         res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
         res.end(JSON.stringify({ ok: true, filename }));
+      })
+      .catch(() => {
+        res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error: "Invalid request body" }));
+      });
+    return;
+  }
+
+  // ── API: global settings read ─────────────────────────────────────
+  if (pathname === "/api/global-settings" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    const settings = loadGlobalSettings();
+    res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+    res.end(JSON.stringify(settings));
+    return;
+  }
+
+  // ── API: global settings write ────────────────────────────────────
+  if (pathname === "/api/global-settings" && req.method === "POST") {
+    readBody(req)
+      .then((body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const current = loadGlobalSettings();
+        if (typeof data["matomoEnabled"] === "boolean") {
+          current.matomoEnabled = data["matomoEnabled"];
+        }
+        saveGlobalSettings(current);
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ ok: true }));
       })
       .catch(() => {
         res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
@@ -862,6 +1047,65 @@ export function handleRequest(
       res.end(JSON.stringify({ ok: true }));
       return;
     }
+  }
+
+  // ── API: read file content for Changed Files viewer ──────────────
+  if (pathname === "/api/file-content" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
+    const rawPath = url.searchParams.get("path") ?? "";
+    // Resolve relative to project dir and ensure it stays within project dir
+    const resolvedPath = rawPath.startsWith("/")
+      ? rawPath
+      : join(server.projectDir!, rawPath);
+    const projectDir = server.projectDir!;
+    if (!resolvedPath.startsWith(projectDir) && !existsSync(resolvedPath)) {
+      res.writeHead(403, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "Access denied" }));
+      return;
+    }
+    try {
+      const content = readFileSync(resolvedPath, "utf-8");
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ content, path: resolvedPath }));
+    } catch {
+      res.writeHead(404, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ error: "File not found or unreadable" }));
+    }
+    return;
+  }
+
+  // ── API: git diff for Changed Files viewer ────────────────────────
+  if (pathname === "/api/git-diff" && req.method === "GET") {
+    if (!checkHmac(req, url, "", server.hmacSecret, res)) return;
+    if (!requireProject(server, res)) return;
+    const rawPath = url.searchParams.get("path") ?? "";
+    const resolvedPath = rawPath.startsWith("/")
+      ? rawPath
+      : join(server.projectDir!, rawPath);
+    try {
+      // Try `git diff HEAD -- <file>` first; fall back to `git diff -- <file>` for untracked
+      let diff = "";
+      try {
+        diff = execFileSync("git", ["diff", "HEAD", "--", resolvedPath], {
+          cwd: server.projectDir!,
+          encoding: "utf-8",
+          timeout: 10000,
+        });
+      } catch {
+        diff = execFileSync("git", ["diff", "--", resolvedPath], {
+          cwd: server.projectDir!,
+          encoding: "utf-8",
+          timeout: 10000,
+        });
+      }
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ diff, path: resolvedPath }));
+    } catch {
+      res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+      res.end(JSON.stringify({ diff: null, path: resolvedPath, unavailable: true }));
+    }
+    return;
   }
 
   // ── 404 ────────────────────────────────────────────────────────────
@@ -975,12 +1219,21 @@ function extractFeatureTitle(filePath: string, fallback: string): string {
   try {
     const content = readFileSync(filePath, "utf-8");
     const lines = content.split("\n");
+    // Prefer an explicit Title: header
+    for (const line of lines) {
+      if (line.startsWith("Title:")) {
+        const t = line.replace("Title:", "").trim();
+        if (t) return t.length > 80 ? t.slice(0, 80) + "…" : t;
+        break;
+      }
+    }
+    // Fall back to first meaningful content line
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
       if (trimmed.startsWith("Feature ID:")) continue;
+      if (trimmed.startsWith("Title:")) continue;
       if (trimmed.startsWith("##")) continue;
-      // Strip leading markdown heading markers
       const clean = trimmed.replace(/^#+\s*/, "");
       if (clean) return clean.length > 80 ? clean.slice(0, 80) + "…" : clean;
     }

@@ -104,6 +104,111 @@ export function renderProjectSelectionPage(_server: WebServer): string {
     }
     .open-btn:hover { background: #2563EB; }
     .open-btn:disabled { opacity: 0.5; cursor: default; }
+    .browse-btn {
+      background: transparent;
+      color: #9CA3AF;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .browse-btn:hover { border-color: #3B82F6; color: #FFFFFF; background: rgba(59,130,246,0.08); }
+    /* ── Folder browser modal ─────────────────────────────────── */
+    .browser-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.72);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .browser-overlay.open { display: flex; }
+    .browser-panel {
+      background: #0B0F1A;
+      border: 1px solid #1E293B;
+      border-radius: 12px;
+      width: 500px;
+      max-width: 94vw;
+      max-height: 78vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+    }
+    .browser-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 14px;
+      border-bottom: 1px solid #1E293B;
+      flex-shrink: 0;
+    }
+    .browser-nav-btn {
+      background: transparent;
+      border: 1px solid #334155;
+      border-radius: 5px;
+      color: #9CA3AF;
+      padding: 4px 10px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .browser-nav-btn:hover { border-color: #3B82F6; color: #FFFFFF; }
+    .browser-nav-btn:disabled { opacity: 0.3; cursor: default; }
+    .browser-current-path {
+      flex: 1;
+      font-size: 11px;
+      color: #6B7280;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .browser-list {
+      flex: 1;
+      overflow-y: auto;
+      list-style: none;
+      padding: 6px 0;
+      margin: 0;
+      min-height: 120px;
+    }
+    .browser-list li {
+      padding: 8px 18px;
+      cursor: pointer;
+      color: #D1D5DB;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.12s;
+    }
+    .browser-list li:hover { background: #1E293B; color: #FFFFFF; }
+    .browser-list li.selected { background: rgba(59,130,246,0.15); color: #60A5FA; }
+    .browser-list .folder-icon { color: #60A5FA; flex-shrink: 0; }
+    .browser-list .empty-msg { color: #4B5563; cursor: default; font-size: 13px; padding: 20px 18px; }
+    .browser-list .empty-msg:hover { background: transparent; }
+    .browser-footer {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 10px 14px;
+      border-top: 1px solid #1E293B;
+      flex-shrink: 0;
+    }
+    .browser-selected-label {
+      flex: 1;
+      font-size: 11px;
+      color: #6B7280;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
     .error-msg {
       color: #EF4444;
       font-size: 13px;
@@ -194,9 +299,28 @@ export function renderProjectSelectionPage(_server: WebServer): string {
     <label for="path-input">Project Folder</label>
     <div class="input-row">
       <input type="text" id="path-input" placeholder="/path/to/your/project" autocomplete="off" autofocus />
+      <button class="browse-btn" id="browse-btn">Browse…</button>
       <button class="open-btn" id="open-btn">Open</button>
     </div>
     <div class="error-msg" id="error-msg"></div>
+
+  <!-- Folder browser modal -->
+  <div class="browser-overlay" id="browser-overlay">
+    <div class="browser-panel">
+      <div class="browser-header">
+        <button class="browser-nav-btn" id="browser-up-btn" disabled>↑ Up</button>
+        <button class="browser-nav-btn" id="browser-home-btn">⌂</button>
+        <span class="browser-current-path" id="browser-current-path"></span>
+        <button class="browser-nav-btn" id="browser-close-btn">✕</button>
+      </div>
+      <ul class="browser-list" id="browser-list"></ul>
+      <div class="browser-footer">
+        <span class="browser-selected-label" id="browser-selected-label"></span>
+        <button class="browse-btn" id="browser-cancel-btn">Cancel</button>
+        <button class="open-btn" id="browser-select-btn">Select</button>
+      </div>
+    </div>
+  </div>
 
     <!-- API key helper — shown when project needs ANTHROPIC_API_KEY -->
     <div id="apikey-section" style="display:none">
@@ -233,6 +357,121 @@ export function renderProjectSelectionPage(_server: WebServer): string {
     const saveApikeyBtn = document.getElementById('save-apikey-btn');
     const apikeyError = document.getElementById('apikey-error');
     let pendingProjectDir = null;
+
+    // ── Folder browser ──────────────────────────────────────────────────
+    const browseBtn         = document.getElementById('browse-btn');
+    const browserOverlay    = document.getElementById('browser-overlay');
+    const browserList       = document.getElementById('browser-list');
+    const browserCurrentPath = document.getElementById('browser-current-path');
+    const browserSelectedLabel = document.getElementById('browser-selected-label');
+    const browserUpBtn      = document.getElementById('browser-up-btn');
+    const browserHomeBtn    = document.getElementById('browser-home-btn');
+    const browserCloseBtn   = document.getElementById('browser-close-btn');
+    const browserCancelBtn  = document.getElementById('browser-cancel-btn');
+    const browserSelectBtn  = document.getElementById('browser-select-btn');
+
+    let browserCurrentDir = null;
+    let browserParentDir  = null;
+    let browserSelectedDir = null;
+
+    function browserOpen() {
+      const startPath = pathInput.value.trim() || null;
+      browserOverlay.classList.add('open');
+      browserSelectedDir = null;
+      browserSelectedLabel.textContent = '';
+      browseTo(startPath);
+    }
+
+    function browserClose() {
+      browserOverlay.classList.remove('open');
+    }
+
+    function browseTo(path) {
+      const url = '/api/browse-folders' + (path ? '?path=' + encodeURIComponent(path) : '');
+      browserList.innerHTML = '<li style="padding:16px 18px;color:#4B5563;">Loading…</li>';
+      browserUpBtn.disabled = true;
+
+      fetch(url)
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            browserList.innerHTML = '<li class="empty-msg">' + data.error + '</li>';
+            return;
+          }
+
+          browserCurrentDir = data.path;
+          browserParentDir  = data.parent;
+          browserCurrentPath.textContent = data.path;
+          browserUpBtn.disabled = !data.parent;
+
+          // Reset selection when navigating
+          browserSelectedDir = null;
+          browserSelectedLabel.textContent = '';
+
+          browserList.innerHTML = '';
+          if (data.dirs.length === 0) {
+            const li = document.createElement('li');
+            li.className = 'empty-msg';
+            li.textContent = 'No subfolders';
+            browserList.appendChild(li);
+            return;
+          }
+
+          data.dirs.forEach(name => {
+            const li = document.createElement('li');
+            li.innerHTML = '<span class="folder-icon">▶</span>' + name;
+            li.title = data.path + '/' + name;
+
+            li.addEventListener('click', () => {
+              // Single-click: select this folder
+              document.querySelectorAll('#browser-list li').forEach(el => el.classList.remove('selected'));
+              li.classList.add('selected');
+              browserSelectedDir = data.path.replace(/\\\\$/, '') + '/' + name;
+              browserSelectedLabel.textContent = name;
+            });
+
+            li.addEventListener('dblclick', () => {
+              // Double-click: navigate into
+              browseTo(data.path.replace(/\\\\$/, '') + '/' + name);
+            });
+
+            browserList.appendChild(li);
+          });
+        })
+        .catch(() => {
+          browserList.innerHTML = '<li class="empty-msg">Could not read directory</li>';
+        });
+    }
+
+    browseBtn.addEventListener('click', browserOpen);
+    browserCloseBtn.addEventListener('click', browserClose);
+    browserCancelBtn.addEventListener('click', browserClose);
+
+    browserUpBtn.addEventListener('click', () => {
+      if (browserParentDir) browseTo(browserParentDir);
+    });
+
+    browserHomeBtn.addEventListener('click', () => browseTo(null));
+
+    browserSelectBtn.addEventListener('click', () => {
+      const chosen = browserSelectedDir || browserCurrentDir;
+      if (chosen) {
+        pathInput.value = chosen;
+        hideError();
+      }
+      browserClose();
+    });
+
+    // Close on backdrop click
+    browserOverlay.addEventListener('click', e => {
+      if (e.target === browserOverlay) browserClose();
+    });
+
+    // Close on Escape
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && browserOverlay.classList.contains('open')) browserClose();
+    });
+    // ── End folder browser ──────────────────────────────────────────────
 
     // Load recent paths
     fetch('/api/path-history')
@@ -552,8 +791,8 @@ export function renderMainPage(server: WebServer): string {
       <!-- Left column: unified conversation feed (thinking + commands + git) -->
       <div id="panels-left">
         <div class="panel" id="panel-conversation">
-          <div class="panel-tab-bar">
-            <span class="panel-tab active">&#x1F4AC; Conversation</span>
+          <div class="panel-tab-bar" id="conv-tab-bar">
+            <span class="panel-tab active" id="tab-conversation" data-conv-tab="conversation">&#x1F4AC; Conversation</span>
           </div>
           <div class="panel-content" id="conversation-content"
                role="region" aria-label="Agent conversation feed"></div>
@@ -590,11 +829,14 @@ export function renderMainPage(server: WebServer): string {
           <div class="panel-tab-bar">
             <span class="panel-tab active" data-panel-tab="plan" id="tab-plan">&#x1F4CB; Plan</span>
             <span class="panel-tab" data-panel-tab="fileops" id="tab-fileops">&#x1F4C4; File Operations</span>
+            <span class="panel-tab" data-panel-tab="changedfiles" id="tab-changedfiles">&#x1F4C2; Changed Files</span>
           </div>
           <div class="panel-content" id="plan-content"
                role="region" aria-label="Plan panel"></div>
           <div class="panel-content" id="fileops-content" style="display:none"
                role="region" aria-label="File operations panel"></div>
+          <div class="panel-content" id="changedfiles-content" style="display:none"
+               role="region" aria-label="Changed files panel"></div>
         </div>
       </div>
 
@@ -652,12 +894,28 @@ export function renderMainPage(server: WebServer): string {
     <main id="settings-view" style="display:none" role="main" aria-label="Settings">
       <div id="settings-container">
         <div id="settings-tab-bar">
-          <button class="settings-tab active" data-file="CLAUDE.md">CLAUDE.md</button>
+          <button class="settings-tab active" data-panel="kaibot-settings">&#x2699;&#xFE0F; KaiBot Settings</button>
+          <button class="settings-tab" data-file="CLAUDE.md">CLAUDE.md</button>
           <button class="settings-tab" data-file="README.md">README.md</button>
           <button class="settings-tab" data-file=".kaibot/PROMPT.md">.kaibot/PROMPT.md</button>
           <button class="settings-tab" data-file="system_prompt.md">system_prompt.md</button>
         </div>
-        <div id="settings-editor-area">
+        <div id="kaibot-settings-panel">
+          <div class="kaibot-settings-section">
+            <h3>Global Settings</h3>
+            <div class="kaibot-setting-row">
+              <div class="kaibot-setting-info">
+                <label for="setting-matomo-enabled">Allow Matomo for anonymous KaiBot Usage Tracking in order to understand how KaiBot is used</label>
+                <span>No personal data is collected. Helps improve KaiBot for everyone.</span>
+              </div>
+              <label class="kaibot-toggle" aria-label="Toggle Matomo usage tracking">
+                <input type="checkbox" id="setting-matomo-enabled" checked />
+                <span class="kaibot-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div id="settings-editor-area" style="display:none">
           <div id="settings-editor-toolbar">
             <span id="settings-file-label"></span>
             <button id="settings-save-btn" class="settings-save-btn">Save</button>
