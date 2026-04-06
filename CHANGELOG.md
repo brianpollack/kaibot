@@ -163,3 +163,6 @@ Added an explicit, event-driven notification path so that when the Claude agent 
 April 1st, 2026: main: brian
 Hardened `sdk.smoke.test.ts` to gracefully handle API/network failures. The `beforeAll` hook now wraps the Claude API call in a try/catch — when the call fails (network blocked, auth error, etc.), an `apiUnavailable` flag is set and all individual tests return early instead of failing. This ensures `npm test` exits with code 0 regardless of whether the API is reachable. All other test files (19) were audited and confirmed to already use proper mocks or skip guards — no changes needed. The full suite (20 files, 260 tests) passes, and `typecheck`/`lint` remain clean.
 
+April 6th, 2026: main: brian
+**Current state:** Version 0.20.0 is fully committed and tagged locally but could not be pushed due to a SOCKS proxy network error (`nc: connection failed, SOCKS error 2`).
+
