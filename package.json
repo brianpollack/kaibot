@@ -1,6 +1,6 @@
 {
   "name": "kaibot",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "Protovate KaiBot is an AI Agent Wrapper that helps process project changes through an AI LLM with change tracking",
   "author": "Brian Pollack - Protovate",
   "type": "module",
