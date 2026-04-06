@@ -126,6 +126,55 @@ function escHtml(str) {
   return div.innerHTML;
 }
 
+function getCssVar(name, fallback) {
+  var value = getComputedStyle(document.documentElement).getPropertyValue(name || "").trim();
+  return value || fallback || "";
+}
+
+function getActiveAceThemeName() {
+  return window.__KAIBOT_ACE_THEME_NAME || "ace/theme/tomorrow_night";
+}
+
+function applyAceThemeToAllEditors() {
+  var theme = getActiveAceThemeName();
+  var editors = [nfAceEditor, settingsAceEditor];
+  Object.keys(_dynTabEditors || {}).forEach(function (key) {
+    if (_dynTabEditors[key]) editors.push(_dynTabEditors[key]);
+  });
+  editors.forEach(function (editor) {
+    if (!editor || !editor.setTheme) return;
+    try { editor.setTheme(theme); } catch (e) {}
+  });
+}
+
+function reloadThemeAssets() {
+  return new Promise(function (resolve) {
+    var cssLink = document.getElementById("kaibot-theme-css");
+    if (cssLink) {
+      cssLink.setAttribute("href", "/theme.css?v=" + Date.now());
+    }
+
+    var aceScript = document.getElementById("kaibot-ace-theme-script");
+    if (!aceScript) {
+      applyAceThemeToAllEditors();
+      resolve();
+      return;
+    }
+
+    var nextScript = document.createElement("script");
+    nextScript.id = "kaibot-ace-theme-script";
+    nextScript.src = "/theme/ace.js?v=" + Date.now();
+    nextScript.onload = function () {
+      applyAceThemeToAllEditors();
+      resolve();
+    };
+    nextScript.onerror = function () {
+      resolve();
+    };
+    aceScript.parentNode.replaceChild(nextScript, aceScript);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Thinking content renderer — parses ```lang code fences into highlighted blocks
 // ---------------------------------------------------------------------------
@@ -225,8 +274,6 @@ var ConversationBlockRenderer = {
     var html =
       '<div class="conv-agent">' +
         '<div class="conv-agent-header">' +
-          '<img class="conv-agent-favicon" src="https://claude.ai/favicon.ico"' +
-            ' alt="Claude" onerror="this.style.display=\'none\'">' +
           '<span class="conv-agent-type">' + escHtml(agentType) + "</span>" +
           (agentDesc
             ? '<span class="conv-agent-sep"> \u2014 </span>' +
@@ -927,11 +974,11 @@ function loadFileIntoTab(filePath, key, contentDiv) {
       var safeKey = key.replace(/[^a-zA-Z0-9]/g, "_");
       var aceEl = document.getElementById("ace-" + safeKey);
       if (!aceEl || typeof ace === "undefined") {
-        contentDiv.innerHTML = '<pre style="padding:12px;color:#e2e8f0;overflow:auto;height:100%">' + escHtml(data.content) + '</pre>';
+        contentDiv.innerHTML = '<pre style="padding:12px;color:' + escHtml(getCssVar("--kb-text-soft", "#e2e8f0")) + ';overflow:auto;height:100%">' + escHtml(data.content) + '</pre>';
         return;
       }
       var editor = ace.edit(aceEl);
-      editor.setTheme("ace/theme/monokai");
+      editor.setTheme(getActiveAceThemeName());
       editor.setReadOnly(true);
       editor.setShowPrintMargin(false);
       editor.setOptions({ fontSize: "12px", wrap: false });
@@ -949,7 +996,7 @@ function loadFileIntoTab(filePath, key, contentDiv) {
       _dynTabEditors[key] = editor;
     })
     .catch(function() {
-      contentDiv.innerHTML = '<div class="empty-state" style="color:#ef4444">Failed to load file.</div>';
+      contentDiv.innerHTML = '<div class="empty-state" style="color:' + escHtml(getCssVar("--kb-error", "#ef4444")) + '">Failed to load file.</div>';
     });
 }
 
@@ -1903,6 +1950,16 @@ var settingsCurrentPanel = null; // "kaibot-settings" or null (file editor)
 var settingsDirtyFiles = {};
 var settingsOriginalContent = {};
 var settingsCurrentContent = {};
+var globalThemeSettings = { theme: null };
+var themeBrowserState = {
+  open: false,
+  query: "",
+  page: 1,
+  hasMore: false,
+  loading: false,
+  results: [],
+  debounceTimer: null,
+};
 
 function showSettingsView() {
   hideAllViews();
@@ -1922,7 +1979,7 @@ function initNFEditor() {
   if (nfAceEditor) return;
   if (typeof ace === "undefined") return;
   nfAceEditor = ace.edit("nf-description-editor");
-  nfAceEditor.setTheme("ace/theme/tomorrow_night");
+  nfAceEditor.setTheme(getActiveAceThemeName());
   nfAceEditor.session.setMode("ace/mode/markdown");
   nfAceEditor.setOptions({
     fontSize: "13px",
@@ -1936,7 +1993,7 @@ function initSettingsEditor() {
   if (settingsAceEditor) return;
   if (typeof ace === "undefined") return;
   settingsAceEditor = ace.edit("settings-editor");
-  settingsAceEditor.setTheme("ace/theme/tomorrow_night");
+  settingsAceEditor.setTheme(getActiveAceThemeName());
   settingsAceEditor.session.setMode("ace/mode/markdown");
   settingsAceEditor.setOptions({
     fontSize: "13px",
@@ -1978,13 +2035,222 @@ function loadKaiBotSettingsPanel() {
   signedFetch("/api/global-settings")
     .then(function (r) { return r.json(); })
     .then(function (data) {
+      globalThemeSettings = data || {};
       var toggle = document.getElementById("setting-matomo-enabled");
       if (toggle) {
         // Default is enabled (true) when key is absent
         toggle.checked = data.matomoEnabled !== false;
       }
+      updateThemeSettingLabel();
     })
     .catch(function () {});
+}
+
+function updateThemeSettingLabel() {
+  var label = document.getElementById("setting-theme-name");
+  if (!label) return;
+  var activeTheme = globalThemeSettings && globalThemeSettings.theme;
+  label.textContent = activeTheme && activeTheme.name ? activeTheme.name : "KaiBot";
+}
+
+function openThemeBrowser() {
+  var overlay = document.getElementById("theme-browser-overlay");
+  if (!overlay) return;
+  overlay.style.display = "";
+  themeBrowserState.open = true;
+  themeBrowserState.page = 1;
+  themeBrowserState.results = [];
+  themeBrowserState.hasMore = false;
+  renderThemeResults();
+  var input = document.getElementById("theme-search-input");
+  if (input) {
+    input.value = themeBrowserState.query || "";
+    setTimeout(function () { input.focus(); }, 0);
+  }
+  searchThemes(themeBrowserState.query || "", 1, false);
+}
+
+function closeThemeBrowser() {
+  var overlay = document.getElementById("theme-browser-overlay");
+  if (overlay) overlay.style.display = "none";
+  themeBrowserState.open = false;
+  hideThemeBrowserError();
+}
+
+function setThemeBrowserLoading(isLoading) {
+  themeBrowserState.loading = isLoading;
+  var summary = document.getElementById("theme-browser-summary");
+  if (summary) {
+    summary.textContent = isLoading ? "Searching marketplace…" : "";
+  }
+  var loadMoreBtn = document.getElementById("theme-load-more-btn");
+  if (loadMoreBtn) loadMoreBtn.disabled = isLoading;
+}
+
+function showThemeBrowserError(message) {
+  var errorEl = document.getElementById("theme-browser-error");
+  if (!errorEl) return;
+  errorEl.textContent = message || "Theme request failed.";
+  errorEl.style.display = "";
+}
+
+function hideThemeBrowserError() {
+  var errorEl = document.getElementById("theme-browser-error");
+  if (!errorEl) return;
+  errorEl.textContent = "";
+  errorEl.style.display = "none";
+}
+
+function renderThemeResults() {
+  var container = document.getElementById("theme-browser-results");
+  var summary = document.getElementById("theme-browser-summary");
+  var loadMoreBtn = document.getElementById("theme-load-more-btn");
+  if (!container) return;
+
+  if (themeBrowserState.loading && themeBrowserState.results.length === 0) {
+    container.innerHTML = '<div class="empty-state">Searching themes…</div>';
+  } else if (themeBrowserState.results.length === 0) {
+    container.innerHTML = '<div class="empty-state">No themes found.</div>';
+  } else {
+    container.innerHTML = themeBrowserState.results.map(function (item) {
+      return (
+        '<div class="theme-result-card">' +
+          '<div class="theme-result-copy">' +
+            '<div class="theme-result-name">' + escHtml(item.name) + '</div>' +
+            '<div class="theme-result-meta">' +
+              '<span>' + escHtml(formatThemeDate(item.lastUpdated)) + '</span>' +
+              '<span>' + escHtml(formatNumber(item.installCount || 0)) + ' installs</span>' +
+              '<span>' + escHtml(item.publisher) + "</span>" +
+            "</div>" +
+          "</div>" +
+          '<button class="dialog-btn dialog-btn-primary theme-select-btn" type="button" data-theme-id="' + escHtml(item.id) + '">Select</button>' +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  if (summary && !themeBrowserState.loading) {
+    summary.textContent = themeBrowserState.results.length
+      ? "Showing " + themeBrowserState.results.length + (themeBrowserState.hasMore ? "+" : "") + " theme" + (themeBrowserState.results.length === 1 ? "" : "s")
+      : "";
+  }
+  if (loadMoreBtn) {
+    loadMoreBtn.style.display = themeBrowserState.hasMore ? "" : "none";
+  }
+}
+
+function searchThemes(query, page, append) {
+  hideThemeBrowserError();
+  themeBrowserState.query = query || "";
+  themeBrowserState.page = page || 1;
+  setThemeBrowserLoading(true);
+  if (!append) {
+    themeBrowserState.results = [];
+    renderThemeResults();
+  }
+
+  signedFetch("/api/themes/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: themeBrowserState.query, page: themeBrowserState.page }),
+  })
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if (data.error) throw new Error(data.error);
+      themeBrowserState.results = append
+        ? themeBrowserState.results.concat(data.results || [])
+        : (data.results || []);
+      themeBrowserState.hasMore = !!data.hasMore;
+      renderThemeResults();
+    })
+    .catch(function (err) {
+      showThemeBrowserError((err && err.message) || "Unable to search the marketplace.");
+      renderThemeResults();
+    })
+    .finally(function () {
+      setThemeBrowserLoading(false);
+    });
+}
+
+function queueThemeSearch(query) {
+  if (themeBrowserState.debounceTimer) {
+    clearTimeout(themeBrowserState.debounceTimer);
+  }
+  themeBrowserState.debounceTimer = setTimeout(function () {
+    searchThemes(query, 1, false);
+  }, 250);
+}
+
+function applyThemeSelectionById(themeId) {
+  var selected = null;
+  themeBrowserState.results.forEach(function (item) {
+    if (item.id === themeId) selected = item;
+  });
+  if (!selected) return;
+  hideThemeBrowserError();
+  setThemeBrowserLoading(true);
+  signedFetch("/api/themes/apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(selected),
+  })
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if (data.error) throw new Error(data.error);
+      globalThemeSettings = data.settings || {};
+      updateThemeSettingLabel();
+      return reloadThemeAssets();
+    })
+    .then(function () {
+      if ($statusMsg) $statusMsg.textContent = "Theme updated.";
+      closeThemeBrowser();
+    })
+    .catch(function (err) {
+      showThemeBrowserError((err && err.message) || "Unable to apply theme.");
+    })
+    .finally(function () {
+      setThemeBrowserLoading(false);
+    });
+}
+
+function resetThemeSelection() {
+  hideThemeBrowserError();
+  setThemeBrowserLoading(true);
+  signedFetch("/api/themes/reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  })
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if (data.error) throw new Error(data.error);
+      globalThemeSettings = data.settings || {};
+      updateThemeSettingLabel();
+      return reloadThemeAssets();
+    })
+    .then(function () {
+      if ($statusMsg) $statusMsg.textContent = "Using the default KaiBot theme.";
+      closeThemeBrowser();
+    })
+    .catch(function (err) {
+      showThemeBrowserError((err && err.message) || "Unable to reset theme.");
+    })
+    .finally(function () {
+      setThemeBrowserLoading(false);
+    });
+}
+
+function formatThemeDate(value) {
+  if (!value) return "Unknown date";
+  try {
+    return new Date(value).toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch (e) {
+    return value;
+  }
 }
 
 function selectSettingsTab(filePath) {
@@ -3407,6 +3673,13 @@ document.addEventListener("keydown", function (e) {
     return;
   }
 
+  var themeOverlayCheck = document.getElementById("theme-browser-overlay");
+  if (themeOverlayCheck && themeOverlayCheck.style.display !== "none" && e.key === "Escape") {
+    e.preventDefault();
+    closeThemeBrowser();
+    return;
+  }
+
   if (activePopup) return;
   if (newFeatureDialogOpen) return;
   if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
@@ -3582,6 +3855,37 @@ document.addEventListener("click", function (e) {
     saveSettingsFile();
   }
 
+  var themeBrowseBtn = document.getElementById("theme-browse-btn");
+  if (themeBrowseBtn && themeBrowseBtn.contains(e.target)) {
+    openThemeBrowser();
+  }
+
+  var themeBrowserClose = document.getElementById("theme-browser-close");
+  if (themeBrowserClose && themeBrowserClose.contains(e.target)) {
+    closeThemeBrowser();
+  }
+
+  var themeBrowserOverlay = document.getElementById("theme-browser-overlay");
+  if (themeBrowserOverlay && e.target === themeBrowserOverlay) {
+    closeThemeBrowser();
+  }
+
+  var themeResetBtn = document.getElementById("theme-reset-btn");
+  if (themeResetBtn && themeResetBtn.contains(e.target)) {
+    resetThemeSelection();
+  }
+
+  var themeLoadMoreBtn = document.getElementById("theme-load-more-btn");
+  if (themeLoadMoreBtn && themeLoadMoreBtn.contains(e.target)) {
+    searchThemes(themeBrowserState.query || "", (themeBrowserState.page || 1) + 1, true);
+    themeBrowserState.page = (themeBrowserState.page || 1) + 1;
+  }
+
+  var themeSelectBtn = e.target.closest ? e.target.closest(".theme-select-btn") : null;
+  if (themeSelectBtn) {
+    applyThemeSelectionById(themeSelectBtn.getAttribute("data-theme-id") || "");
+  }
+
   // New Feature dialog — close button
   var nfClose = document.getElementById("nf-close");
   if (nfClose && nfClose.contains(e.target)) {
@@ -3698,6 +4002,13 @@ document.addEventListener("change", function (e) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ matomoEnabled: toggle.checked }),
     }).catch(function () {});
+  }
+});
+
+document.addEventListener("input", function (e) {
+  var input = e.target;
+  if (input && input.id === "theme-search-input") {
+    queueThemeSearch(input.value || "");
   }
 });
 

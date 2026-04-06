@@ -649,8 +649,10 @@ export function renderMainPage(server: WebServer): string {
 
   <!-- App styles (no external CDN dependencies) -->
   <link rel="stylesheet" href="/static/css/main.css" />
+  <link rel="stylesheet" href="/theme.css" id="kaibot-theme-css" />
   <!-- Ace Editor for settings file editing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.min.js"></script>
+  <script src="/theme/ace.js" id="kaibot-ace-theme-script"></script>
   <!-- Syntax highlighting for code blocks in conversation -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
@@ -913,6 +915,19 @@ export function renderMainPage(server: WebServer): string {
                 <span class="kaibot-toggle-slider"></span>
               </label>
             </div>
+            <div class="kaibot-setting-row kaibot-setting-theme-row">
+              <div class="kaibot-setting-info">
+                <label for="theme-browse-btn">Theme</label>
+                <span>Choose a VS Code Marketplace theme for the KaiBot interface and editors.</span>
+              </div>
+              <div class="kaibot-theme-card">
+                <div class="kaibot-theme-meta">
+                  <span class="kaibot-theme-label">Active Theme</span>
+                  <strong id="setting-theme-name">KaiBot</strong>
+                </div>
+                <button id="theme-browse-btn" class="dialog-btn dialog-btn-primary" type="button">Browse Themes…</button>
+              </div>
+            </div>
           </div>
         </div>
         <div id="settings-editor-area" style="display:none">
@@ -987,6 +1002,31 @@ export function renderMainPage(server: WebServer): string {
       </div>
       <div class="dialog-body fd-dialog-body" id="fd-body">
         <div class="empty-state">Loading&#x2026;</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Theme Browser Dialog ──────────────────────────────────────── -->
+  <div id="theme-browser-overlay" class="dialog-overlay" style="display:none"
+       role="dialog" aria-modal="true" aria-labelledby="theme-browser-title">
+    <div class="dialog-box theme-browser-box">
+      <div class="dialog-header">
+        <h2 id="theme-browser-title">Browse Themes</h2>
+        <button class="dialog-close" id="theme-browser-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="dialog-body theme-browser-body">
+        <div class="theme-browser-toolbar">
+          <button id="theme-reset-btn" class="dialog-btn dialog-btn-secondary" type="button">Reset to Default KaiBot Theme</button>
+          <input type="text" id="theme-search-input" class="dialog-input theme-search-input" placeholder="Search VS Code marketplace themes…" autocomplete="off" />
+        </div>
+        <div id="theme-browser-error" class="dialog-error" style="display:none"></div>
+        <div id="theme-browser-results" class="theme-results-list">
+          <div class="empty-state">Search for a theme to begin.</div>
+        </div>
+      </div>
+      <div class="dialog-footer theme-browser-footer">
+        <button id="theme-load-more-btn" class="dialog-btn dialog-btn-secondary" type="button" style="display:none">Load More</button>
+        <span id="theme-browser-summary" class="theme-browser-summary"></span>
       </div>
     </div>
   </div>

@@ -23,7 +23,19 @@ import { loadCodeAssistOptions, loadPromptContent, runCodeAssist } from "../code
 import { KaiClient } from "../KaiClient.js";
 import type { SDKAssistantMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { todoExists, loadTodoItems, removeTodoItem, runTodoPlan } from "../todoAssist.js";
-import { loadGlobalSettings, saveGlobalSettings } from "../globalSettings.js";
+import {
+  getGlobalAceThemePath,
+  getGlobalThemeCssPath,
+  loadGlobalSettings,
+  saveGlobalSettings,
+} from "../globalSettings.js";
+import {
+  applyMarketplaceTheme,
+  getThemePageSize,
+  renderEmptyAceThemeModule,
+  resetMarketplaceTheme,
+  searchMarketplaceThemes,
+} from "./themeManager.js";
 
 // ---------------------------------------------------------------------------
 // MIME types
@@ -145,6 +157,16 @@ export function handleRequest(
   // ── favicon.ico — serve the KaiBot logo icon ──────────────────────
   if (pathname === "/favicon.ico") {
     serveStatic("/static/favicon.ico", res);
+    return;
+  }
+
+  // ── Dynamic theme assets ───────────────────────────────────────────
+  if (pathname === "/theme.css") {
+    serveGeneratedFile(getGlobalThemeCssPath(), "text/css; charset=utf-8", res, "/* KaiBot theme overrides */\n");
+    return;
+  }
+  if (pathname === "/theme/ace.js") {
+    serveGeneratedFile(getGlobalAceThemePath(), "application/javascript; charset=utf-8", res, renderEmptyAceThemeModule());
     return;
   }
 
@@ -948,9 +970,80 @@ export function handleRequest(
         if (typeof data["matomoEnabled"] === "boolean") {
           current.matomoEnabled = data["matomoEnabled"];
         }
+        if (data["theme"] === null) {
+          delete current.theme;
+        }
         saveGlobalSettings(current);
         res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
-        res.end(JSON.stringify({ ok: true }));
+        res.end(JSON.stringify({ ok: true, settings: current }));
+      })
+      .catch(() => {
+        res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error: "Invalid request body" }));
+      });
+    return;
+  }
+
+  // ── API: search VS Code marketplace themes ────────────────────────
+  if (pathname === "/api/themes/search" && req.method === "POST") {
+    readBody(req)
+      .then(async (body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const query = typeof data["query"] === "string" ? data["query"] : "";
+        const page = typeof data["page"] === "number" ? data["page"] : 1;
+        const results = await searchMarketplaceThemes(query, page);
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify(results));
+      })
+      .catch((err: unknown) => {
+        const error = err instanceof Error ? err.message : "Unable to search themes";
+        res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error, pageSize: getThemePageSize(), results: [] }));
+      });
+    return;
+  }
+
+  // ── API: apply marketplace theme ──────────────────────────────────
+  if (pathname === "/api/themes/apply" && req.method === "POST") {
+    readBody(req)
+      .then(async (body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        const data = JSON.parse(body) as Record<string, unknown>;
+        const current = loadGlobalSettings();
+        const next = await applyMarketplaceTheme({
+          id: String(data["id"] ?? "").trim(),
+          name: String(data["name"] ?? "").trim(),
+          publisher: String(data["publisher"] ?? "").trim(),
+          extensionName: String(data["extensionName"] ?? "").trim(),
+          version: String(data["version"] ?? "").trim(),
+          lastUpdated: String(data["lastUpdated"] ?? "").trim(),
+          installCount: Number(data["installCount"] ?? 0) || 0,
+          assetUri: String(data["assetUri"] ?? "").trim(),
+          fallbackAssetUri: String(data["fallbackAssetUri"] ?? "").trim(),
+        }, current);
+        saveGlobalSettings(next);
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ ok: true, settings: next }));
+      })
+      .catch((err: unknown) => {
+        const error = err instanceof Error ? err.message : "Unable to apply theme";
+        res.writeHead(500, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ error }));
+      });
+    return;
+  }
+
+  // ── API: reset custom theme ───────────────────────────────────────
+  if (pathname === "/api/themes/reset" && req.method === "POST") {
+    readBody(req)
+      .then((body) => {
+        if (!checkHmac(req, url, body, server.hmacSecret, res)) return;
+        const current = loadGlobalSettings();
+        const next = resetMarketplaceTheme(current);
+        saveGlobalSettings(next);
+        res.writeHead(200, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
+        res.end(JSON.stringify({ ok: true, settings: next }));
       })
       .catch(() => {
         res.writeHead(400, { "Content-Type": "application/json", ...NO_CACHE_HEADERS });
@@ -1418,6 +1511,20 @@ function serveStatic(pathname: string, res: ServerResponse): void {
   const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
 
   const body = readFileSync(resolved);
+  res.writeHead(200, {
+    "Content-Type": contentType,
+    ...NO_CACHE_HEADERS,
+  });
+  res.end(body);
+}
+
+function serveGeneratedFile(
+  filePath: string,
+  contentType: string,
+  res: ServerResponse,
+  fallback: string,
+): void {
+  const body = existsSync(filePath) ? readFileSync(filePath) : Buffer.from(fallback, "utf8");
   res.writeHead(200, {
     "Content-Type": contentType,
     ...NO_CACHE_HEADERS,

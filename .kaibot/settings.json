@@ -1,7 +1,28 @@
 {
   "sandbox": {
     "enabled": true,
-    "autoAllowBashIfSandboxed": true
+    "autoAllowBashIfSandboxed": true,
+    "excludedCommands": [
+      "npm",
+      "npx",
+      "pnpm",
+      "yarn",
+      "pip",
+      "pip3",
+      "mix",
+      "hex",
+      "psql"
+    ],
+    "network": {
+      "allowedDomains": [
+        "*"
+      ],
+      "allowUnixSockets": [
+        "/tmp/.s.PGSQL.5432",
+        "/var/run/postgresql/.s.PGSQL.5432",
+        "/var/run/postgresql"
+      ]
+    }
   },
   "permissions": {
     "defaultMode": "acceptEdits",

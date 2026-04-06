@@ -13,6 +13,11 @@ import { join } from "path";
 export interface GlobalKaiBotSettings {
   /** Whether anonymous usage tracking via Matomo is enabled. Default: true. */
   matomoEnabled?: boolean;
+  /** Optional custom UI theme selected from the VS Code marketplace. */
+  theme?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -28,6 +33,14 @@ export function getGlobalSettingsDir(): string {
 
 export function getGlobalSettingsPath(): string {
   return join(getGlobalSettingsDir(), "settings.json");
+}
+
+export function getGlobalThemeCssPath(): string {
+  return join(getGlobalSettingsDir(), "theme.css");
+}
+
+export function getGlobalAceThemePath(): string {
+  return join(getGlobalSettingsDir(), "theme-ace.js");
 }
 
 // ---------------------------------------------------------------------------
